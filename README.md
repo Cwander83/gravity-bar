@@ -67,9 +67,39 @@ gravity-bar/
 
 ---
 
-## Quick Start (Mockup Preview)
+## Quick Start
 
-Open the interactive HTML mockup in your browser to inspect or tweak the UI styles, colors, and layouts before building the native Swift app:
+### 1. Build and Run Native App
+Build the native macOS menu bar application using Swift Package Manager:
+
+```bash
+# Build binary
+swift build
+
+# Run automated self-tests
+swift run GravityBar --test
+
+# Launch GravityBar in the menu bar
+swift run GravityBar
+```
+
+> **Note**: When GravityBar launches, it docks in your macOS menu bar with a gauge icon and quota percentage. Click the menu bar item or hover over it to inspect the popover.
+
+### 2. Configure Credentials & Local Paths
+GravityBar comes with **Mock Mode** enabled by default so you can inspect the UI immediately out of the box.
+
+To connect live accounts:
+1. Open the Popover and click the **Preferences** gear (`⚙`).
+2. Toggle off **Mock Provider Mode**.
+3. Enable or disable providers (customize for work Mac with Codex or personal Mac with Claude/Gemini).
+4. Specify paths to local state/session files:
+   - **Claude**: `~/.claude/state.json`
+   - **Codex**: `~/.codex/session.json`
+   - **Gemini**: `~/.gemini/antigravity-ide/metrics.json`
+5. Click **Apply & Close**. If local files are not yet present, GravityBar gracefully falls back to synthetic mock values without crashing.
+
+### 3. Interactive Mockup Preview
+Before or alongside native app usage, you can inspect or modify styles in the browser:
 
 ```bash
 open mockup/index.html
