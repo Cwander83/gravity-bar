@@ -16,11 +16,12 @@
     - 🔴 **Critical / Rate-Limited**: `> 85%`
   - Reset countdowns (e.g. `78% used • Resets in 1h 42m`).
 - **Provider Support**:
-  1. **Claude Code CLI**: 5-hour rolling rate limits and weekly token caps parsed from local state (`~/.claude/`).
-  2. **Claude Pro / Team Web**: Message window limits and session metrics with fallback mock adapter.
+  1. **Claude (Unified Code CLI & Pro/Team Web)**: 5-hour rolling rate limits and weekly token caps.
+  2. **OpenAI Codex**: Work plan usage, monthly $100 tier quotas, and hourly rate limits.
   3. **Google Antigravity / Gemini**: Active session quotas and model rate limits (`agy` CLI metrics & Gemini cache).
   4. **Mock Provider**: Zero-config mock dataset for offline design iteration and testing.
 - **Preferences & Configuration**:
+  - Per-provider enable/disable toggles (customize per personal or work Mac).
   - Adjustable background polling intervals (30s, 1m, 5m).
   - Custom log file and session token paths.
   - Mock mode toggle for rapid UI development.
