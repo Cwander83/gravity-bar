@@ -51,6 +51,9 @@ public final class UsageManager: ObservableObject {
         }
     }
 
+    @Published public var showingSettings: Bool = false
+    @Published public var isSpinning: Bool = false
+
     @Published public private(set) var isRefreshing: Bool = false
     @Published public private(set) var lastUpdated: Date?
 
