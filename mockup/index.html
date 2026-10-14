@@ -1023,16 +1023,15 @@
         <!-- Provider Metrics Rows -->
         <div class="popover-body">
 
-          <!-- 1. Unified Claude (Code & Pro Web) -->
+          <!-- 1. Claude -->
           <div class="provider-card" id="cardClaude">
             <div class="provider-header">
               <div class="provider-meta">
                 <div class="provider-icon icon-claude">C</div>
                 <div>
-                  <div class="provider-name">Claude (Pro / Team)</div>
+                  <div class="provider-name">Claude</div>
                 </div>
               </div>
-              <span class="provider-plan">Unified Sub</span>
             </div>
 
             <!-- 5-hour rolling limit -->
@@ -1066,30 +1065,29 @@
             </div>
           </div>
 
-          <!-- 2. OpenAI Codex ($100 Work Plan) -->
+          <!-- 2. Codex -->
           <div class="provider-card" id="cardCodex">
             <div class="provider-header">
               <div class="provider-meta">
                 <div class="provider-icon" style="background: linear-gradient(135deg, #10a37f, #059669); color: #fff;">⚡</div>
                 <div>
-                  <div class="provider-name">OpenAI Codex</div>
+                  <div class="provider-name">Codex</div>
                 </div>
               </div>
-              <span class="provider-plan" style="color: #34d399; border-color: rgba(52, 211, 153, 0.3); background: rgba(16, 163, 127, 0.15);">$100 Work Tier</span>
             </div>
 
-            <!-- Monthly $100 allowance -->
+            <!-- Monthly allowance -->
             <div class="quota-item">
               <div class="quota-header-row">
-                <span class="quota-label">Monthly Plan Consumption</span>
-                <span class="quota-numbers"><span id="codexMonthlyVal" class="quota-percent" style="color: var(--status-normal);">52%</span> ($52.00 / $100.00)</span>
+                <span class="quota-label">Monthly Allowance</span>
+                <span class="quota-numbers"><span id="codexMonthlyVal" class="quota-percent" style="color: var(--status-normal);">52%</span> (520 / 1,000 units)</span>
               </div>
               <div class="progress-track">
                 <div id="codexMonthlyBar" class="progress-bar bar-normal" style="width: 52%;"></div>
               </div>
               <div class="quota-footer-row">
                 <span class="reset-countdown">􀐫 Resets Nov 1 (18d)</span>
-                <span>$48.00 remaining</span>
+                <span>480 units remaining</span>
               </div>
             </div>
 
@@ -1109,7 +1107,7 @@
             </div>
           </div>
 
-          <!-- 3. Google Antigravity / Gemini -->
+          <!-- 3. Antigravity / Gemini -->
           <div class="provider-card" id="cardGemini">
             <div class="provider-header">
               <div class="provider-meta">
@@ -1118,7 +1116,6 @@
                   <div class="provider-name">Antigravity / Gemini</div>
                 </div>
               </div>
-              <span class="provider-plan">Pro Quota</span>
             </div>
 
             <div class="quota-item">
@@ -1179,7 +1176,7 @@
               
               <div class="toggle-row" style="margin-bottom: 6px;">
                 <div class="toggle-info">
-                  <h4>Claude (Pro / Team)</h4>
+                  <h4>Claude</h4>
                   <p>Message window & token usage</p>
                 </div>
                 <label class="switch">
@@ -1190,8 +1187,8 @@
 
               <div class="toggle-row" style="margin-bottom: 6px;">
                 <div class="toggle-info">
-                  <h4>OpenAI Codex ($100 Work Plan)</h4>
-                  <p>Monthly budget allowance & burst limits</p>
+                  <h4>Codex</h4>
+                  <p>Monthly allowance & burst limits</p>
                 </div>
                 <label class="switch">
                   <input type="checkbox" checked id="toggleCodexProvider">
@@ -1325,7 +1322,7 @@
         <!-- 7. Codex Live Slider -->
         <div class="lab-control-item">
           <div class="lab-control-label">
-            <span>Live Adjust Codex ($100)</span>
+            <span>Live Adjust Codex</span>
             <span id="codexLiveLabel">52%</span>
           </div>
           <input type="range" class="range-slider" min="5" max="100" value="52" id="codexLiveSlider">

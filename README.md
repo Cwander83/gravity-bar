@@ -1,6 +1,6 @@
 # GravityBar 📊
 
-> **GravityBar** is a native macOS menu bar utility built in Swift & SwiftUI that gives developers and AI power users real-time visibility into usage limits, quota consumption, rate limits, and countdown timers across Claude Code CLI, Claude Web, and Google Antigravity / Gemini.
+> **GravityBar** is a native macOS menu bar utility built in Swift & SwiftUI that gives developers and AI power users real-time visibility into usage limits, quota consumption, rate limits, and countdown timers across Claude, Codex, and Antigravity / Gemini.
 
 ---
 
@@ -16,9 +16,9 @@
     - 🔴 **Critical / Rate-Limited**: `> 85%`
   - Reset countdowns (e.g. `78% used • Resets in 1h 42m`).
 - **Provider Support**:
-  1. **Claude (Unified Code CLI & Pro/Team Web)**: 5-hour rolling rate limits and weekly token caps.
-  2. **OpenAI Codex**: Work plan usage, monthly $100 tier quotas, and hourly rate limits.
-  3. **Google Antigravity / Gemini**: Active session quotas and model rate limits (`agy` CLI metrics & Gemini cache).
+  1. **Claude**: 5-hour rolling rate limits and weekly token caps.
+  2. **Codex**: Allowance usage and hourly rate limits.
+  3. **Antigravity / Gemini**: Active session quotas and model rate limits.
   4. **Mock Provider**: Zero-config mock dataset for offline design iteration and testing.
 - **Preferences & Configuration**:
   - Per-provider enable/disable toggles (customize per personal or work Mac).
