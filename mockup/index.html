@@ -1,0 +1,1525 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>GravityBar - macOS Menu Bar UI Mockup & Style Lab</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      /* Theme System Tokens */
+      --bg-desktop: radial-gradient(circle at 20% 20%, #1e1b4b 0%, #0f172a 45%, #020617 100%);
+      --menubar-bg: rgba(15, 23, 42, 0.72);
+      --menubar-border: rgba(255, 255, 255, 0.08);
+      --menubar-text: #f8fafc;
+      --menubar-subtext: #94a3b8;
+      
+      --popover-bg: rgba(15, 23, 42, 0.78);
+      --popover-card-bg: rgba(30, 41, 59, 0.65);
+      --popover-card-border: rgba(255, 255, 255, 0.09);
+      --popover-card-hover: rgba(51, 65, 85, 0.75);
+      
+      --text-primary: #f8fafc;
+      --text-secondary: #94a3b8;
+      --text-tertiary: #64748b;
+      
+      --accent-color: #6366f1;
+      --accent-hover: #4f46e5;
+      --accent-glow: rgba(99, 102, 241, 0.35);
+      
+      /* Status Threshold Colors */
+      --status-normal: #10b981;
+      --status-normal-bg: rgba(16, 185, 129, 0.15);
+      --status-warning: #f59e0b;
+      --status-warning-bg: rgba(245, 158, 11, 0.15);
+      --status-critical: #ef4444;
+      --status-critical-bg: rgba(239, 68, 68, 0.15);
+      
+      --border-radius-popover: 20px;
+      --border-radius-card: 14px;
+      --blur-strength: 28px;
+      --bar-height: 7px;
+    }
+
+    /* Light Theme Variant */
+    body.theme-light {
+      --bg-desktop: radial-gradient(circle at 10% 20%, #e0e7ff 0%, #f1f5f9 50%, #e2e8f0 100%);
+      --menubar-bg: rgba(255, 255, 255, 0.82);
+      --menubar-border: rgba(0, 0, 0, 0.08);
+      --menubar-text: #0f172a;
+      --menubar-subtext: #475569;
+      
+      --popover-bg: rgba(255, 255, 255, 0.88);
+      --popover-card-bg: rgba(241, 245, 249, 0.85);
+      --popover-card-border: rgba(0, 0, 0, 0.08);
+      --popover-card-hover: rgba(226, 232, 240, 0.95);
+      
+      --text-primary: #0f172a;
+      --text-secondary: #475569;
+      --text-tertiary: #94a3b8;
+      --accent-glow: rgba(99, 102, 241, 0.2);
+    }
+
+    /* Cyberpunk Theme Variant */
+    body.theme-cyber {
+      --bg-desktop: radial-gradient(circle at 30% 10%, #2e0854 0%, #0d0221 60%, #05010d 100%);
+      --menubar-bg: rgba(13, 2, 33, 0.85);
+      --menubar-border: rgba(236, 72, 153, 0.25);
+      --popover-bg: rgba(13, 2, 33, 0.92);
+      --popover-card-bg: rgba(36, 12, 69, 0.65);
+      --popover-card-border: rgba(236, 72, 153, 0.2);
+      --accent-color: #ec4899;
+      --accent-glow: rgba(236, 72, 153, 0.4);
+      --status-normal: #06b6d4;
+      --status-warning: #f59e0b;
+      --status-critical: #ff0055;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      user-select: none;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    body {
+      min-height: 100vh;
+      background: var(--bg-desktop);
+      font-family: -apple-system, BlinkMacSystemFont, "Plus Jakarta Sans", "SF Pro Display", sans-serif;
+      color: var(--text-primary);
+      display: flex;
+      flex-direction: column;
+      overflow-x: hidden;
+      transition: background 0.4s ease;
+    }
+
+    /* Top macOS Menu Bar */
+    .macos-menubar {
+      height: 32px;
+      background: var(--menubar-bg);
+      backdrop-filter: blur(20px);
+      -webkit-backdrop-filter: blur(20px);
+      border-bottom: 1px solid var(--menubar-border);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 14px;
+      font-size: 13px;
+      font-weight: 500;
+      position: sticky;
+      top: 0;
+      z-index: 1000;
+    }
+
+    .menubar-left {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+    }
+
+    .apple-icon {
+      font-size: 15px;
+      cursor: pointer;
+      opacity: 0.9;
+    }
+
+    .menubar-app-title {
+      font-weight: 700;
+      color: var(--menubar-text);
+      letter-spacing: -0.2px;
+    }
+
+    .menubar-items {
+      display: flex;
+      gap: 14px;
+      color: var(--menubar-subtext);
+    }
+
+    .menubar-item {
+      cursor: pointer;
+      transition: color 0.15s;
+    }
+
+    .menubar-item:hover {
+      color: var(--menubar-text);
+    }
+
+    .menubar-right {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .menubar-sys-icon {
+      font-size: 12px;
+      color: var(--menubar-subtext);
+      cursor: pointer;
+    }
+
+    /* GravityBar Menu Bar Status Item */
+    .gravitybar-status-item {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 3px 8px;
+      border-radius: 6px;
+      background: rgba(255, 255, 255, 0.06);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      cursor: pointer;
+      transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+      position: relative;
+    }
+
+    .gravitybar-status-item:hover, .gravitybar-status-item.active {
+      background: var(--accent-color);
+      color: #ffffff;
+      border-color: rgba(255, 255, 255, 0.25);
+      box-shadow: 0 0 12px var(--accent-glow);
+    }
+
+    .status-item-icon {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .status-item-gauge {
+      width: 14px;
+      height: 14px;
+      transform: rotate(-90deg);
+    }
+
+    .gauge-bg {
+      stroke: rgba(255, 255, 255, 0.2);
+    }
+
+    .gauge-fill {
+      stroke: currentColor;
+      transition: stroke-dashoffset 0.4s ease;
+    }
+
+    .status-item-label {
+      font-size: 11px;
+      font-weight: 700;
+      font-family: "JetBrains Mono", monospace;
+      letter-spacing: -0.3px;
+    }
+
+    /* Main Desktop Stage */
+    .desktop-stage {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 30px 20px 80px;
+      position: relative;
+    }
+
+    /* Popover Container */
+    .popover-anchor {
+      position: relative;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+
+    .popover-arrow {
+      width: 18px;
+      height: 9px;
+      overflow: hidden;
+      margin-bottom: -1px;
+      z-index: 20;
+    }
+
+    .popover-arrow::after {
+      content: "";
+      display: block;
+      width: 14px;
+      height: 14px;
+      background: var(--popover-bg);
+      transform: rotate(45deg) translate(2px, 2px);
+      border-left: 1px solid var(--popover-card-border);
+      border-top: 1px solid var(--popover-card-border);
+      backdrop-filter: blur(var(--blur-strength));
+      -webkit-backdrop-filter: blur(var(--blur-strength));
+    }
+
+    .popover-window {
+      width: 380px;
+      background: var(--popover-bg);
+      backdrop-filter: blur(var(--blur-strength));
+      -webkit-backdrop-filter: blur(var(--blur-strength));
+      border: 1px solid var(--popover-card-border);
+      border-radius: var(--border-radius-popover);
+      box-shadow: 0 24px 60px rgba(0, 0, 0, 0.45), 0 4px 16px rgba(0, 0, 0, 0.2);
+      overflow: hidden;
+      transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+      position: relative;
+    }
+
+    /* Popover Header */
+    .popover-header {
+      padding: 16px 18px 12px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      border-bottom: 1px solid var(--popover-card-border);
+    }
+
+    .brand-section {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .brand-badge {
+      width: 32px;
+      height: 32px;
+      border-radius: 9px;
+      background: linear-gradient(135deg, var(--accent-color), #818cf8);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: #fff;
+      box-shadow: 0 4px 12px var(--accent-glow);
+    }
+
+    .brand-text h2 {
+      font-size: 15px;
+      font-weight: 700;
+      letter-spacing: -0.3px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .brand-sub {
+      font-size: 11px;
+      color: var(--text-tertiary);
+    }
+
+    .live-badge {
+      font-size: 9px;
+      font-weight: 700;
+      text-transform: uppercase;
+      padding: 2px 6px;
+      border-radius: 999px;
+      background: rgba(16, 185, 129, 0.18);
+      color: #10b981;
+      border: 1px solid rgba(16, 185, 129, 0.3);
+      letter-spacing: 0.5px;
+    }
+
+    .header-actions {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .icon-button {
+      width: 28px;
+      height: 28px;
+      border-radius: 8px;
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      color: var(--text-secondary);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      transition: all 0.15s ease;
+    }
+
+    .icon-button:hover {
+      background: rgba(255, 255, 255, 0.12);
+      color: var(--text-primary);
+      transform: translateY(-1px);
+    }
+
+    .icon-button.spinning svg {
+      animation: spin 0.8s linear;
+    }
+
+    @keyframes spin {
+      100% { transform: rotate(360deg); }
+    }
+
+    /* Overall Health Gauge Banner */
+    .health-banner {
+      margin: 14px 16px 8px;
+      padding: 12px 14px;
+      background: var(--popover-card-bg);
+      border: 1px solid var(--popover-card-border);
+      border-radius: var(--border-radius-card);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .health-info {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+
+    .health-title {
+      font-size: 11px;
+      text-transform: uppercase;
+      font-weight: 700;
+      letter-spacing: 0.6px;
+      color: var(--text-tertiary);
+    }
+
+    .health-status {
+      font-size: 14px;
+      font-weight: 700;
+      color: var(--text-primary);
+    }
+
+    .health-countdown {
+      font-size: 11px;
+      color: var(--text-secondary);
+      display: flex;
+      align-items: center;
+      gap: 4px;
+    }
+
+    .circular-progress {
+      position: relative;
+      width: 44px;
+      height: 44px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .circular-progress svg {
+      transform: rotate(-90deg);
+      width: 100%;
+      height: 100%;
+    }
+
+    .circular-progress circle {
+      cx: 22;
+      cy: 22;
+      r: 18;
+      stroke-width: 4;
+      fill: none;
+    }
+
+    .circle-bg {
+      stroke: rgba(255, 255, 255, 0.08);
+    }
+
+    .circle-bar {
+      stroke: var(--status-warning);
+      stroke-dasharray: 113.09;
+      stroke-dashoffset: 24.88; /* ~78% */
+      stroke-linecap: round;
+      transition: stroke-dashoffset 0.6s cubic-bezier(0.16, 1, 0.3, 1), stroke 0.3s;
+    }
+
+    .circular-label {
+      position: absolute;
+      font-size: 10px;
+      font-weight: 800;
+      font-family: "JetBrains Mono", monospace;
+    }
+
+    /* Popover Content / Rows */
+    .popover-body {
+      padding: 8px 16px 14px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      max-height: 460px;
+      overflow-y: auto;
+    }
+
+    .popover-body::-webkit-scrollbar {
+      width: 4px;
+    }
+    .popover-body::-webkit-scrollbar-thumb {
+      background: rgba(255, 255, 255, 0.15);
+      border-radius: 4px;
+    }
+
+    .provider-card {
+      background: var(--popover-card-bg);
+      border: 1px solid var(--popover-card-border);
+      border-radius: var(--border-radius-card);
+      padding: 12px 14px;
+      transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+      display: flex;
+      flex-direction: column;
+      gap: 9px;
+    }
+
+    .provider-card:hover {
+      background: var(--popover-card-hover);
+      border-color: rgba(255, 255, 255, 0.15);
+      transform: translateY(-1px);
+    }
+
+    .provider-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .provider-meta {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .provider-icon {
+      width: 22px;
+      height: 22px;
+      border-radius: 6px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 11px;
+      font-weight: 700;
+    }
+
+    .icon-claude {
+      background: #d97706;
+      color: #fff;
+    }
+
+    .icon-gemini {
+      background: linear-gradient(135deg, #2563eb, #7c3aed);
+      color: #fff;
+    }
+
+    .icon-mock {
+      background: #475569;
+      color: #fff;
+    }
+
+    .provider-name {
+      font-size: 13px;
+      font-weight: 700;
+      color: var(--text-primary);
+    }
+
+    .provider-plan {
+      font-size: 10px;
+      padding: 1px 6px;
+      border-radius: 4px;
+      background: rgba(255, 255, 255, 0.08);
+      color: var(--text-secondary);
+      font-weight: 600;
+    }
+
+    .quota-item {
+      display: flex;
+      flex-direction: column;
+      gap: 5px;
+    }
+
+    .quota-header-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      font-size: 11px;
+    }
+
+    .quota-label {
+      color: var(--text-secondary);
+      font-weight: 500;
+    }
+
+    .quota-numbers {
+      font-family: "JetBrains Mono", monospace;
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--text-primary);
+    }
+
+    .quota-percent {
+      font-weight: 700;
+    }
+
+    .progress-track {
+      height: var(--bar-height);
+      background: rgba(255, 255, 255, 0.08);
+      border-radius: 999px;
+      overflow: hidden;
+      position: relative;
+    }
+
+    .progress-bar {
+      height: 100%;
+      border-radius: 999px;
+      transition: width 0.5s cubic-bezier(0.16, 1, 0.3, 1), background-color 0.3s ease;
+      position: relative;
+    }
+
+    .bar-normal {
+      background: var(--status-normal);
+      box-shadow: 0 0 8px rgba(16, 185, 129, 0.4);
+    }
+
+    .bar-warning {
+      background: var(--status-warning);
+      box-shadow: 0 0 8px rgba(245, 158, 11, 0.4);
+    }
+
+    .bar-critical {
+      background: var(--status-critical);
+      box-shadow: 0 0 10px rgba(239, 68, 68, 0.6);
+      animation: pulse-bar 2s infinite;
+    }
+
+    @keyframes pulse-bar {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.75; }
+    }
+
+    .quota-footer-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 10px;
+      color: var(--text-tertiary);
+    }
+
+    .reset-countdown {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      color: var(--text-secondary);
+      font-weight: 500;
+    }
+
+    /* Popover Footer */
+    .popover-footer {
+      padding: 10px 16px 14px;
+      border-top: 1px solid var(--popover-card-border);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      font-size: 11px;
+      color: var(--text-tertiary);
+    }
+
+    .quick-links {
+      display: flex;
+      gap: 12px;
+    }
+
+    .quick-link {
+      color: var(--text-secondary);
+      text-decoration: none;
+      transition: color 0.15s;
+      cursor: pointer;
+    }
+
+    .quick-link:hover {
+      color: var(--accent-color);
+    }
+
+    .footer-polling-info {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+    }
+
+    .pulse-dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: #10b981;
+      box-shadow: 0 0 6px #10b981;
+    }
+
+    /* Settings Slide-In Panel */
+    .settings-panel {
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: var(--popover-bg);
+      backdrop-filter: blur(var(--blur-strength));
+      -webkit-backdrop-filter: blur(var(--blur-strength));
+      z-index: 50;
+      display: flex;
+      flex-direction: column;
+      transform: translateX(100%);
+      transition: transform 0.28s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+
+    .settings-panel.open {
+      transform: translateX(0);
+    }
+
+    .settings-header {
+      padding: 16px 18px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      border-bottom: 1px solid var(--popover-card-border);
+    }
+
+    .settings-header h3 {
+      font-size: 14px;
+      font-weight: 700;
+    }
+
+    .settings-content {
+      flex: 1;
+      padding: 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+      overflow-y: auto;
+    }
+
+    .settings-group {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .settings-label {
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--text-tertiary);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    .pill-selector {
+      display: flex;
+      background: rgba(255, 255, 255, 0.06);
+      border-radius: 8px;
+      padding: 2px;
+      border: 1px solid var(--popover-card-border);
+    }
+
+    .pill-btn {
+      flex: 1;
+      padding: 6px 0;
+      text-align: center;
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--text-secondary);
+      border-radius: 6px;
+      cursor: pointer;
+      border: none;
+      background: transparent;
+      transition: all 0.15s ease;
+    }
+
+    .pill-btn.active {
+      background: var(--accent-color);
+      color: #fff;
+      box-shadow: 0 2px 8px var(--accent-glow);
+    }
+
+    .input-field {
+      width: 100%;
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid var(--popover-card-border);
+      border-radius: 8px;
+      padding: 8px 10px;
+      font-size: 11px;
+      color: var(--text-primary);
+      font-family: "JetBrains Mono", monospace;
+      outline: none;
+    }
+
+    .input-field:focus {
+      border-color: var(--accent-color);
+      box-shadow: 0 0 0 2px var(--accent-glow);
+    }
+
+    .toggle-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 10px 12px;
+      background: var(--popover-card-bg);
+      border: 1px solid var(--popover-card-border);
+      border-radius: var(--border-radius-card);
+    }
+
+    .toggle-info h4 {
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--text-primary);
+    }
+
+    .toggle-info p {
+      font-size: 10px;
+      color: var(--text-tertiary);
+    }
+
+    /* iOS/macOS Toggle Switch */
+    .switch {
+      position: relative;
+      display: inline-block;
+      width: 36px;
+      height: 20px;
+    }
+
+    .switch input {
+      opacity: 0;
+      width: 0;
+      height: 0;
+    }
+
+    .slider {
+      position: absolute;
+      cursor: pointer;
+      top: 0; left: 0; right: 0; bottom: 0;
+      background-color: rgba(255, 255, 255, 0.2);
+      transition: .25s;
+      border-radius: 20px;
+    }
+
+    .slider:before {
+      position: absolute;
+      content: "";
+      height: 16px;
+      width: 16px;
+      left: 2px;
+      bottom: 2px;
+      background-color: white;
+      transition: .25s;
+      border-radius: 50%;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.3);
+    }
+
+    input:checked + .slider {
+      background-color: var(--accent-color);
+    }
+
+    input:checked + .slider:before {
+      transform: translateX(16px);
+    }
+
+    /* Style Lab / Customizer Dock */
+    .style-lab-dock {
+      margin-top: 40px;
+      width: 100%;
+      max-width: 820px;
+      background: rgba(15, 23, 42, 0.85);
+      backdrop-filter: blur(24px);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      border-radius: 18px;
+      padding: 22px 26px;
+      box-shadow: 0 16px 40px rgba(0, 0, 0, 0.35);
+      display: flex;
+      flex-direction: column;
+      gap: 18px;
+    }
+
+    .lab-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+      padding-bottom: 12px;
+    }
+
+    .lab-title {
+      font-size: 14px;
+      font-weight: 700;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .lab-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 18px;
+    }
+
+    .lab-control-item {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .lab-control-label {
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--text-tertiary);
+      display: flex;
+      justify-content: space-between;
+    }
+
+    .btn-group {
+      display: flex;
+      gap: 6px;
+    }
+
+    .lab-btn {
+      flex: 1;
+      padding: 6px 10px;
+      font-size: 11px;
+      font-weight: 600;
+      background: rgba(255, 255, 255, 0.06);
+      border: 1px solid rgba(255, 255, 255, 0.09);
+      color: var(--text-secondary);
+      border-radius: 8px;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+
+    .lab-btn:hover {
+      background: rgba(255, 255, 255, 0.12);
+      color: var(--text-primary);
+    }
+
+    .lab-btn.active {
+      background: var(--accent-color);
+      color: #fff;
+      border-color: transparent;
+    }
+
+    .range-slider {
+      width: 100%;
+      accent-color: var(--accent-color);
+    }
+
+    .tokens-preview-box {
+      background: #090d16;
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: 10px;
+      padding: 12px;
+      font-family: "JetBrains Mono", monospace;
+      font-size: 11px;
+      color: #38bdf8;
+      overflow-x: auto;
+      white-space: pre;
+    }
+
+    .copy-btn {
+      padding: 6px 12px;
+      font-size: 11px;
+      font-weight: 600;
+      background: rgba(255, 255, 255, 0.08);
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      color: var(--text-primary);
+      border-radius: 6px;
+      cursor: pointer;
+    }
+    .copy-btn:hover {
+      background: var(--accent-color);
+    }
+  </style>
+</head>
+<body class="theme-dark">
+
+  <!-- Simulated macOS Top Menu Bar -->
+  <header class="macos-menubar">
+    <div class="menubar-left">
+      <span class="apple-icon"></span>
+      <span class="menubar-app-title">GravityBar</span>
+      <div class="menubar-items">
+        <span class="menubar-item">File</span>
+        <span class="menubar-item">Edit</span>
+        <span class="menubar-item">View</span>
+        <span class="menubar-item">Window</span>
+        <span class="menubar-item">Help</span>
+      </div>
+    </div>
+
+    <div class="menubar-right">
+      <!-- GravityBar Status Item in Menu Bar -->
+      <div id="gravityBarStatusItem" class="gravitybar-status-item active" title="GravityBar: 78% Active Usage">
+        <div class="status-item-icon">
+          <svg class="status-item-gauge" viewBox="0 0 20 20">
+            <circle class="gauge-bg" cx="10" cy="10" r="7" stroke-width="2.5" fill="none"></circle>
+            <circle id="menuBarGaugeFill" class="gauge-fill" cx="10" cy="10" r="7" stroke-width="2.5" fill="none"
+              stroke-dasharray="43.98" stroke-dashoffset="9.67"></circle>
+          </svg>
+        </div>
+        <span id="menuBarPercentLabel" class="status-item-label">78%</span>
+      </div>
+
+      <span class="menubar-sys-icon">􀙇</span> <!-- Wi-Fi -->
+      <span class="menubar-sys-icon">􀛨 94%</span> <!-- Battery -->
+      <span class="menubar-sys-icon">􀊫</span> <!-- Spotlight -->
+      <span class="menubar-sys-icon">􀜊</span> <!-- Control Center -->
+      <span class="menubar-sys-icon" style="font-weight: 500; font-size: 12px;">Tue Oct 13 9:31 PM</span>
+    </div>
+  </header>
+
+  <!-- Interactive Desktop Preview Stage -->
+  <main class="desktop-stage">
+
+    <div class="popover-anchor">
+      <!-- Popover Pointer Arrow -->
+      <div class="popover-arrow"></div>
+
+      <!-- Popover Window -->
+      <div class="popover-window" id="popoverWindow">
+
+        <!-- Main Popover Header -->
+        <div class="popover-header">
+          <div class="brand-section">
+            <div class="brand-badge">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                <line x1="18" y1="20" x2="18" y2="10"></line>
+                <line x1="12" y1="20" x2="12" y2="4"></line>
+                <line x1="6" y1="20" x2="6" y2="14"></line>
+              </svg>
+            </div>
+            <div class="brand-text">
+              <h2>GravityBar <span class="live-badge" id="liveModeBadge">LIVE</span></h2>
+              <div class="brand-sub" id="lastUpdatedLabel">Updated 3s ago</div>
+            </div>
+          </div>
+
+          <div class="header-actions">
+            <button class="icon-button" id="refreshBtn" title="Manual Refresh">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M21.5 2v6h-6M2.5 22v-6h6M2 11.5a10 10 0 0 1 18.8-4.3M22 12.5a10 10 0 0 1-18.8 4.2"/>
+              </svg>
+            </button>
+            <button class="icon-button" id="settingsToggleBtn" title="Preferences">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                <circle cx="12" cy="12" r="3"></circle>
+                <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+              </svg>
+            </button>
+          </div>
+        </div>
+
+        <!-- Overall Health Banner -->
+        <div class="health-banner">
+          <div class="health-info">
+            <span class="health-title">Overall Urgency</span>
+            <span class="health-status" id="summaryStatusText">Elevated Usage (78%)</span>
+            <span class="health-countdown">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+              Next reset in 1h 42m
+            </span>
+          </div>
+
+          <div class="circular-progress">
+            <svg viewBox="0 0 44 44">
+              <circle class="circle-bg" cx="22" cy="22" r="18"></circle>
+              <circle id="summaryCircle" class="circle-bar" cx="22" cy="22" r="18"></circle>
+            </svg>
+            <span id="summaryCircleLabel" class="circular-label">78%</span>
+          </div>
+        </div>
+
+        <!-- Provider Metrics Rows -->
+        <div class="popover-body">
+
+          <!-- 1. Claude Code CLI -->
+          <div class="provider-card">
+            <div class="provider-header">
+              <div class="provider-meta">
+                <div class="provider-icon icon-claude">C</div>
+                <div>
+                  <div class="provider-name">Claude Code CLI</div>
+                </div>
+              </div>
+              <span class="provider-plan">Max Tier</span>
+            </div>
+
+            <!-- 5-hour rolling limit -->
+            <div class="quota-item">
+              <div class="quota-header-row">
+                <span class="quota-label">5-Hour Rolling Limit</span>
+                <span class="quota-numbers"><span id="claudeRollingVal" class="quota-percent" style="color: var(--status-warning);">78%</span> (156/200 req)</span>
+              </div>
+              <div class="progress-track">
+                <div id="claudeRollingBar" class="progress-bar bar-warning" style="width: 78%;"></div>
+              </div>
+              <div class="quota-footer-row">
+                <span class="reset-countdown">􀐫 Resets in 1h 42m</span>
+                <span>~24 req remaining</span>
+              </div>
+            </div>
+
+            <!-- Weekly usage cap -->
+            <div class="quota-item">
+              <div class="quota-header-row">
+                <span class="quota-label">Weekly Usage Cap</span>
+                <span class="quota-numbers"><span id="claudeWeeklyVal" class="quota-percent" style="color: var(--status-normal);">34%</span> (3.4M/10M tok)</span>
+              </div>
+              <div class="progress-track">
+                <div id="claudeWeeklyBar" class="progress-bar bar-normal" style="width: 34%;"></div>
+              </div>
+              <div class="quota-footer-row">
+                <span class="reset-countdown">􀐫 Resets Mon 00:00</span>
+                <span>6.6M tok left</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- 2. Claude Pro / Team Web -->
+          <div class="provider-card">
+            <div class="provider-header">
+              <div class="provider-meta">
+                <div class="provider-icon icon-claude" style="background: #ea580c;">W</div>
+                <div>
+                  <div class="provider-name">Claude Pro Web</div>
+                </div>
+              </div>
+              <span class="provider-plan">Team Seat</span>
+            </div>
+
+            <div class="quota-item">
+              <div class="quota-header-row">
+                <span class="quota-label">Current Message Window</span>
+                <span class="quota-numbers"><span id="claudeWebVal" class="quota-percent" style="color: var(--status-normal);">22%</span> (10/45 msgs)</span>
+              </div>
+              <div class="progress-track">
+                <div id="claudeWebBar" class="progress-bar bar-normal" style="width: 22%;"></div>
+              </div>
+              <div class="quota-footer-row">
+                <span class="reset-countdown">􀐫 Resets at 22:30 EDT</span>
+                <span>35 msgs remaining</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- 3. Google Antigravity / Gemini -->
+          <div class="provider-card">
+            <div class="provider-header">
+              <div class="provider-meta">
+                <div class="provider-icon icon-gemini">G</div>
+                <div>
+                  <div class="provider-name">Antigravity / Gemini</div>
+                </div>
+              </div>
+              <span class="provider-plan">Pro Quota</span>
+            </div>
+
+            <div class="quota-item">
+              <div class="quota-header-row">
+                <span class="quota-label">Active Session Rate Limit</span>
+                <span class="quota-numbers"><span id="geminiQuotaVal" class="quota-percent" style="color: var(--status-critical);">89%</span> (890/1000 RPM)</span>
+              </div>
+              <div class="progress-track">
+                <div id="geminiQuotaBar" class="progress-bar bar-critical" style="width: 89%;"></div>
+              </div>
+              <div class="quota-footer-row">
+                <span class="reset-countdown" style="color: var(--status-critical);">􀇾 Throttling soon • 24m</span>
+                <span>110 RPM buffer</span>
+              </div>
+            </div>
+          </div>
+
+        </div>
+
+        <!-- Popover Footer -->
+        <div class="popover-footer">
+          <div class="quick-links">
+            <span class="quick-link">Claude ↗</span>
+            <span class="quick-link">Gemini ↗</span>
+            <span class="quick-link" id="openSettingsLink">Settings ⚙</span>
+          </div>
+
+          <div class="footer-polling-info">
+            <span class="pulse-dot"></span>
+            <span id="footerIntervalLabel">Polling: 60s</span>
+          </div>
+        </div>
+
+        <!-- Embedded Preferences / Settings View -->
+        <div class="settings-panel" id="settingsPanel">
+          <div class="settings-header">
+            <h3>Preferences & Providers</h3>
+            <button class="icon-button" id="closeSettingsBtn" title="Back to Overview">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                <line x1="18" y1="6" x2="6" y2="18"></line>
+                <line x1="6" y1="6" x2="18" y2="18"></line>
+              </svg>
+            </button>
+          </div>
+
+          <div class="settings-content">
+            <div class="settings-group">
+              <label class="settings-label">Background Polling Interval</label>
+              <div class="pill-selector">
+                <button class="pill-btn" data-sec="30">30s</button>
+                <button class="pill-btn active" data-sec="60">1m</button>
+                <button class="pill-btn" data-sec="300">5m</button>
+              </div>
+            </div>
+
+            <div class="settings-group">
+              <label class="settings-label">Claude CLI Log / State Path</label>
+              <input type="text" class="input-field" value="~/.claude/state.json" spellcheck="false">
+            </div>
+
+            <div class="settings-group">
+              <label class="settings-label">Antigravity / Gemini CLI Cache</label>
+              <input type="text" class="input-field" value="~/.gemini/antigravity-ide/metrics.json" spellcheck="false">
+            </div>
+
+            <div class="settings-group">
+              <div class="toggle-row">
+                <div class="toggle-info">
+                  <h4>Mock Provider Mode</h4>
+                  <p>Use local synthetic metrics without live keys</p>
+                </div>
+                <label class="switch">
+                  <input type="checkbox" id="mockModeToggle">
+                  <span class="slider"></span>
+                </label>
+              </div>
+            </div>
+
+            <div class="settings-group">
+              <div class="toggle-row">
+                <div class="toggle-info">
+                  <h4>Hover to Open Popover</h4>
+                  <p>Open automatically when hovering status item</p>
+                </div>
+                <label class="switch">
+                  <input type="checkbox" checked id="hoverOpenToggle">
+                  <span class="slider"></span>
+                </label>
+              </div>
+            </div>
+
+            <button class="lab-btn active" style="margin-top: 10px; padding: 10px;" id="saveSettingsBtn">Save & Apply Changes</button>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- Style Lab & Interactive Controller Dock -->
+    <section class="style-lab-dock">
+      <div class="lab-header">
+        <div class="lab-title">
+          <span>🛠️</span>
+          <span>GravityBar Style Lab & Interactive Controller</span>
+        </div>
+        <button class="copy-btn" id="copyCssTokensBtn">Copy Swift / CSS Tokens</button>
+      </div>
+
+      <div class="lab-grid">
+        <!-- 1. Color Theme Preset -->
+        <div class="lab-control-item">
+          <div class="lab-control-label">
+            <span>Visual Theme</span>
+          </div>
+          <div class="btn-group">
+            <button class="lab-btn active" onclick="setTheme('theme-dark')">Dark</button>
+            <button class="lab-btn" onclick="setTheme('theme-light')">Light</button>
+            <button class="lab-btn" onclick="setTheme('theme-cyber')">Cyber</button>
+          </div>
+        </div>
+
+        <!-- 2. Simulation Scenario -->
+        <div class="lab-control-item">
+          <div class="lab-control-label">
+            <span>Quota Simulation Scenario</span>
+          </div>
+          <div class="btn-group">
+            <button class="lab-btn" onclick="applyScenario('healthy')">Healthy</button>
+            <button class="lab-btn active" onclick="applyScenario('warning')">Warning</button>
+            <button class="lab-btn" onclick="applyScenario('critical')">Critical</button>
+          </div>
+        </div>
+
+        <!-- 3. Corner Radius Tweaker -->
+        <div class="lab-control-item">
+          <div class="lab-control-label">
+            <span>Corner Radius</span>
+            <span id="radiusValLabel">20px</span>
+          </div>
+          <input type="range" class="range-slider" min="10" max="32" value="20" id="radiusSlider">
+        </div>
+
+        <!-- 4. Glass Blur Tweaker -->
+        <div class="lab-control-item">
+          <div class="lab-control-label">
+            <span>Backdrop Blur</span>
+            <span id="blurValLabel">28px</span>
+          </div>
+          <input type="range" class="range-slider" min="8" max="44" value="28" id="blurSlider">
+        </div>
+
+        <!-- 5. Progress Bar Height -->
+        <div class="lab-control-item">
+          <div class="lab-control-label">
+            <span>Progress Bar Height</span>
+            <span id="barHeightLabel">7px</span>
+          </div>
+          <input type="range" class="range-slider" min="4" max="14" value="7" id="barHeightSlider">
+        </div>
+
+        <!-- 6. Custom Interactive Limit Slider -->
+        <div class="lab-control-item">
+          <div class="lab-control-label">
+            <span>Live Adjust Claude CLI</span>
+            <span id="claudeLiveLabel">78%</span>
+          </div>
+          <input type="range" class="range-slider" min="5" max="100" value="78" id="claudeLiveSlider">
+        </div>
+      </div>
+
+      <!-- Generated Design Tokens Preview -->
+      <div class="lab-control-item">
+        <div class="lab-control-label">
+          <span>SwiftUI Token Mapping Preview</span>
+        </div>
+        <div class="tokens-preview-box" id="tokenOutput">struct GravityBarTokens {
+    static let popoverCornerRadius: CGFloat = 20
+    static let popoverBlurRadius: CGFloat = 28
+    static let progressBarHeight: CGFloat = 7
+    static let thresholdNormal: Double = 0.60    // Color.green (<60%)
+    static let thresholdWarning: Double = 0.85   // Color.orange (60%-85%)
+    static let thresholdCritical: Double = 0.85  // Color.red (>85%)
+}</div>
+      </div>
+    </section>
+
+  </main>
+
+  <script>
+    // Elements
+    const popoverWindow = document.getElementById('popoverWindow');
+    const settingsPanel = document.getElementById('settingsPanel');
+    const settingsToggleBtn = document.getElementById('settingsToggleBtn');
+    const closeSettingsBtn = document.getElementById('closeSettingsBtn');
+    const openSettingsLink = document.getElementById('openSettingsLink');
+    const saveSettingsBtn = document.getElementById('saveSettingsBtn');
+    const refreshBtn = document.getElementById('refreshBtn');
+    const lastUpdatedLabel = document.getElementById('lastUpdatedLabel');
+    const gravityBarStatusItem = document.getElementById('gravityBarStatusItem');
+
+    // Quota UI Elements
+    const menuBarGaugeFill = document.getElementById('menuBarGaugeFill');
+    const menuBarPercentLabel = document.getElementById('menuBarPercentLabel');
+    const summaryCircle = document.getElementById('summaryCircle');
+    const summaryCircleLabel = document.getElementById('summaryCircleLabel');
+    const summaryStatusText = document.getElementById('summaryStatusText');
+
+    const claudeRollingVal = document.getElementById('claudeRollingVal');
+    const claudeRollingBar = document.getElementById('claudeRollingBar');
+    const claudeWeeklyVal = document.getElementById('claudeWeeklyVal');
+    const claudeWeeklyBar = document.getElementById('claudeWeeklyBar');
+    const claudeWebVal = document.getElementById('claudeWebVal');
+    const claudeWebBar = document.getElementById('claudeWebBar');
+    const geminiQuotaVal = document.getElementById('geminiQuotaVal');
+    const geminiQuotaBar = document.getElementById('geminiQuotaBar');
+
+    // Controls
+    const radiusSlider = document.getElementById('radiusSlider');
+    const blurSlider = document.getElementById('blurSlider');
+    const barHeightSlider = document.getElementById('barHeightSlider');
+    const claudeLiveSlider = document.getElementById('claudeLiveSlider');
+    const copyCssTokensBtn = document.getElementById('copyCssTokensBtn');
+    const tokenOutput = document.getElementById('tokenOutput');
+    const mockModeToggle = document.getElementById('mockModeToggle');
+    const liveModeBadge = document.getElementById('liveModeBadge');
+
+    // Settings Toggle
+    settingsToggleBtn.addEventListener('click', () => settingsPanel.classList.add('open'));
+    openSettingsLink.addEventListener('click', () => settingsPanel.classList.add('open'));
+    closeSettingsBtn.addEventListener('click', () => settingsPanel.classList.remove('open'));
+    saveSettingsBtn.addEventListener('click', () => {
+      settingsPanel.classList.remove('open');
+      triggerRefreshAnimation();
+    });
+
+    // Mock Mode Toggle
+    mockModeToggle.addEventListener('change', (e) => {
+      if (e.target.checked) {
+        liveModeBadge.textContent = 'MOCK';
+        liveModeBadge.style.color = '#94a3b8';
+        liveModeBadge.style.borderColor = 'rgba(148, 163, 184, 0.4)';
+        liveModeBadge.style.background = 'rgba(148, 163, 184, 0.15)';
+      } else {
+        liveModeBadge.textContent = 'LIVE';
+        liveModeBadge.style.color = '#10b981';
+        liveModeBadge.style.borderColor = 'rgba(16, 185, 129, 0.3)';
+        liveModeBadge.style.background = 'rgba(16, 185, 129, 0.18)';
+      }
+    });
+
+    // Menu Bar Click toggle
+    gravityBarStatusItem.addEventListener('click', () => {
+      popoverWindow.style.opacity = popoverWindow.style.opacity === '0' ? '1' : '0';
+      popoverWindow.style.transform = popoverWindow.style.opacity === '0' ? 'translateY(-10px) scale(0.98)' : 'translateY(0) scale(1)';
+      gravityBarStatusItem.classList.toggle('active', popoverWindow.style.opacity !== '0');
+    });
+
+    // Refresh simulation
+    function triggerRefreshAnimation() {
+      refreshBtn.classList.add('spinning');
+      lastUpdatedLabel.textContent = 'Refreshing...';
+      setTimeout(() => {
+        refreshBtn.classList.remove('spinning');
+        lastUpdatedLabel.textContent = 'Updated just now';
+      }, 700);
+    }
+    refreshBtn.addEventListener('click', triggerRefreshAnimation);
+
+    // Polling Interval Selector
+    document.querySelectorAll('.pill-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        document.querySelectorAll('.pill-btn').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        document.getElementById('footerIntervalLabel').textContent = `Polling: ${btn.dataset.sec}s`;
+      });
+    });
+
+    // Helper for threshold status
+    function getStatusClass(percent) {
+      if (percent > 85) return { cls: 'bar-critical', color: 'var(--status-critical)' };
+      if (percent >= 60) return { cls: 'bar-warning', color: 'var(--status-warning)' };
+      return { cls: 'bar-normal', color: 'var(--status-normal)' };
+    }
+
+    // Set Quota Helper
+    function updateMetric(valElem, barElem, percent, total, unit) {
+      const { cls, color } = getStatusClass(percent);
+      valElem.textContent = `${percent}%`;
+      valElem.style.color = color;
+      barElem.className = `progress-bar ${cls}`;
+      barElem.style.width = `${percent}%`;
+    }
+
+    function updateOverallUI(percent) {
+      const { color } = getStatusClass(percent);
+      menuBarPercentLabel.textContent = `${percent}%`;
+
+      // Status item ring: perimeter = 2 * PI * 7 ≈ 43.98
+      const statusOffset = 43.98 * (1 - percent / 100);
+      menuBarGaugeFill.style.strokeDashoffset = statusOffset;
+
+      // Summary circle: perimeter = 2 * PI * 18 ≈ 113.097
+      const summaryOffset = 113.097 * (1 - percent / 100);
+      summaryCircle.style.strokeDashoffset = summaryOffset;
+      summaryCircle.style.stroke = color;
+      summaryCircleLabel.textContent = `${percent}%`;
+
+      if (percent > 85) {
+        summaryStatusText.textContent = `Critical Quota (${percent}%)`;
+      } else if (percent >= 60) {
+        summaryStatusText.textContent = `Elevated Usage (${percent}%)`;
+      } else {
+        summaryStatusText.textContent = `Normal / Healthy (${percent}%)`;
+      }
+    }
+
+    // Live Slider for Claude CLI
+    claudeLiveSlider.addEventListener('input', (e) => {
+      const val = parseInt(e.target.value);
+      document.getElementById('claudeLiveLabel').textContent = `${val}%`;
+      updateMetric(claudeRollingVal, claudeRollingBar, val);
+      updateOverallUI(Math.max(val, parseInt(geminiQuotaVal.textContent)));
+    });
+
+    // Predefined Scenarios
+    window.applyScenario = function(type) {
+      document.querySelectorAll('.lab-btn').forEach(b => {
+        if (['Healthy', 'Warning', 'Critical'].includes(b.textContent.trim())) {
+          b.classList.toggle('active', b.textContent.trim().toLowerCase() === type);
+        }
+      });
+
+      if (type === 'healthy') {
+        claudeLiveSlider.value = 28;
+        document.getElementById('claudeLiveLabel').textContent = '28%';
+        updateMetric(claudeRollingVal, claudeRollingBar, 28);
+        updateMetric(claudeWeeklyVal, claudeWeeklyBar, 18);
+        updateMetric(claudeWebVal, claudeWebBar, 12);
+        updateMetric(geminiQuotaVal, geminiQuotaBar, 35);
+        updateOverallUI(35);
+      } else if (type === 'warning') {
+        claudeLiveSlider.value = 78;
+        document.getElementById('claudeLiveLabel').textContent = '78%';
+        updateMetric(claudeRollingVal, claudeRollingBar, 78);
+        updateMetric(claudeWeeklyVal, claudeWeeklyBar, 34);
+        updateMetric(claudeWebVal, claudeWebBar, 22);
+        updateMetric(geminiQuotaVal, geminiQuotaBar, 55);
+        updateOverallUI(78);
+      } else if (type === 'critical') {
+        claudeLiveSlider.value = 92;
+        document.getElementById('claudeLiveLabel').textContent = '92%';
+        updateMetric(claudeRollingVal, claudeRollingBar, 92);
+        updateMetric(claudeWeeklyVal, claudeWeeklyBar, 76);
+        updateMetric(claudeWebVal, claudeWebBar, 84);
+        updateMetric(geminiQuotaVal, geminiQuotaBar, 96);
+        updateOverallUI(96);
+      }
+      triggerRefreshAnimation();
+    };
+
+    // Themes
+    window.setTheme = function(themeClass) {
+      document.body.className = themeClass;
+      document.querySelectorAll('.lab-btn').forEach(b => {
+        if (['Dark', 'Light', 'Cyber'].includes(b.textContent.trim())) {
+          b.classList.toggle('active', b.textContent.trim().toLowerCase() === themeClass.replace('theme-', ''));
+        }
+      });
+      updateTokenCode();
+    };
+
+    // Sliders
+    radiusSlider.addEventListener('input', (e) => {
+      const v = e.target.value + 'px';
+      document.documentElement.style.setProperty('--border-radius-popover', v);
+      document.getElementById('radiusValLabel').textContent = v;
+      updateTokenCode();
+    });
+
+    blurSlider.addEventListener('input', (e) => {
+      const v = e.target.value + 'px';
+      document.documentElement.style.setProperty('--blur-strength', v);
+      document.getElementById('blurValLabel').textContent = v;
+      updateTokenCode();
+    });
+
+    barHeightSlider.addEventListener('input', (e) => {
+      const v = e.target.value + 'px';
+      document.documentElement.style.setProperty('--bar-height', v);
+      document.getElementById('barHeightLabel').textContent = v;
+      updateTokenCode();
+    });
+
+    function updateTokenCode() {
+      const r = radiusSlider.value;
+      const b = blurSlider.value;
+      const h = barHeightSlider.value;
+      tokenOutput.textContent = `struct GravityBarTokens {
+    static let popoverCornerRadius: CGFloat = ${r}
+    static let popoverBlurRadius: CGFloat = ${b}
+    static let progressBarHeight: CGFloat = ${h}
+    static let thresholdNormal: Double = 0.60    // Color.green (<60%)
+    static let thresholdWarning: Double = 0.85   // Color.orange (60%-85%)
+    static let thresholdCritical: Double = 0.85  // Color.red (>85%)
+}`;
+    }
+
+    // Copy Tokens
+    copyCssTokensBtn.addEventListener('click', () => {
+      navigator.clipboard.writeText(tokenOutput.textContent).then(() => {
+        copyCssTokensBtn.textContent = '✓ Copied to Clipboard!';
+        setTimeout(() => { copyCssTokensBtn.textContent = 'Copy Swift / CSS Tokens'; }, 2000);
+      });
+    });
+
+    // Initial sync
+    updateOverallUI(78);
+  </script>
+</body>
+</html>
