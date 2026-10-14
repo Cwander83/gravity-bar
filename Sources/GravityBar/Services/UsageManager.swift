@@ -72,15 +72,16 @@ public final class UsageManager: ObservableObject {
             self.enabledProviders = Set(ProviderType.allCases)
         }
 
-        self.isMockMode = defaults.object(forKey: "GravityBar_isMockMode") as? Bool ?? true
+        self.isMockMode = defaults.object(forKey: "GravityBar_isMockMode") as? Bool ?? false
         self.hoverToOpen = defaults.object(forKey: "GravityBar_hoverToOpen") as? Bool ?? true
 
         let interval = defaults.double(forKey: "GravityBar_pollingInterval")
         self.pollingIntervalSeconds = interval > 0 ? interval : 60.0
 
-        self.claudePath = defaults.string(forKey: "GravityBar_claudePath") ?? "~/.claude/state.json"
+        self.claudePath = defaults.string(forKey: "GravityBar_claudePath") ?? "~/Library/Application Support/Claude/plan-usage-history.json"
         self.codexPath = defaults.string(forKey: "GravityBar_codexPath") ?? "~/.codex/session.json"
         self.geminiPath = defaults.string(forKey: "GravityBar_geminiPath") ?? "~/.gemini/antigravity-ide/metrics.json"
+
 
         setupProviders()
         startPolling()
@@ -117,12 +118,14 @@ public final class UsageManager: ObservableObject {
                 let usage = try await provider.fetchUsage()
                 providerUsages[providerType] = usage
             } catch {
-                // Fallback to mock on error
-                let fallback = MockProvider(providerType: providerType)
-                if let mockUsage = try? await fallback.fetchUsage() {
-                    providerUsages[providerType] = mockUsage
-                }
+                let fallback = ProviderUsage(
+                    provider: providerType,
+                    fiveHourMetric: UsageMetric(windowType: .fiveHour, percent: 0.0, resetDate: Date().addingTimeInterval(5 * 3600)),
+                    weeklyMetric: UsageMetric(windowType: .weekly, percent: 0.0, resetDate: Date().addingTimeInterval(7 * 86400))
+                )
+                providerUsages[providerType] = fallback
             }
+
         }
 
         lastUpdated = Date()
