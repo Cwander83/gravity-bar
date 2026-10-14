@@ -17,8 +17,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         if CommandLine.arguments.contains("--test") {
-            runSelfTests()
-            exit(0)
+            Task {
+                await runSelfTestsAsync()
+                exit(0)
+            }
+            return
         }
 
         // Run as menu bar accessory (hide Dock icon)
@@ -26,7 +29,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         statusBarController = StatusBarController(manager: .shared)
     }
 
-    private func runSelfTests() {
+    private func runSelfTestsAsync() async {
         print("Running GravityBar Self-Tests...")
 
         // 1. Thresholds
@@ -63,6 +66,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         assert(usage.highestUrgency == .warning)
         print("✓ Provider urgency aggregation tests passed")
 
+        // 4. Claude Real Data Provider Test
+        let claudeProv = ClaudeProvider()
+        if let u = try? await claudeProv.fetchUsage() {
+            assert(u.provider == .claude)
+            print("✓ Claude real data provider parsed: 5h=\(Int(u.fiveHourMetric.percent))%, weekly=\(Int(u.weeklyMetric.percent))%")
+        }
+
+        // 5. Antigravity Real Data Provider Test
+        let geminiProv = AntigravityProvider()
+        if let u = try? await geminiProv.fetchUsage() {
+            assert(u.provider == .gemini)
+            print("✓ Antigravity real data provider parsed: 5h=\(Int(u.fiveHourMetric.percent))%, weekly=\(Int(u.weeklyMetric.percent))%")
+        }
+
         print("All GravityBar self-tests passed successfully!")
     }
+
 }
