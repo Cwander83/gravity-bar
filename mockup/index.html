@@ -1046,6 +1046,19 @@
                 <span class="reset-countdown">􀐫 Resets in 1h 42m</span>
               </div>
             </div>
+
+            <div class="quota-item">
+              <div class="quota-header-row">
+                <span class="quota-label">Weekly Window</span>
+                <span class="quota-numbers"><span id="claudeWeeklyVal" class="quota-percent" style="color: var(--status-normal);">34%</span></span>
+              </div>
+              <div class="progress-track">
+                <div id="claudeWeeklyBar" class="progress-bar bar-normal" style="width: 34%;"></div>
+              </div>
+              <div class="quota-footer-row">
+                <span class="reset-countdown">􀐫 Resets in 3d 14h</span>
+              </div>
+            </div>
           </div>
 
           <!-- 2. Codex -->
@@ -1071,6 +1084,19 @@
                 <span class="reset-countdown">􀐫 Resets in 42m</span>
               </div>
             </div>
+
+            <div class="quota-item">
+              <div class="quota-header-row">
+                <span class="quota-label">Weekly Window</span>
+                <span class="quota-numbers"><span id="codexWeeklyVal" class="quota-percent" style="color: var(--status-normal);">41%</span></span>
+              </div>
+              <div class="progress-track">
+                <div id="codexWeeklyBar" class="progress-bar bar-normal" style="width: 41%;"></div>
+              </div>
+              <div class="quota-footer-row">
+                <span class="reset-countdown">􀐫 Resets in 4d 8h</span>
+              </div>
+            </div>
           </div>
 
           <!-- 3. Antigravity / Gemini -->
@@ -1094,6 +1120,19 @@
               </div>
               <div class="quota-footer-row">
                 <span class="reset-countdown" style="color: var(--status-critical);">􀐫 Resets in 24m</span>
+              </div>
+            </div>
+
+            <div class="quota-item">
+              <div class="quota-header-row">
+                <span class="quota-label">Weekly Window</span>
+                <span class="quota-numbers"><span id="geminiWeeklyVal" class="quota-percent" style="color: var(--status-warning);">62%</span></span>
+              </div>
+              <div class="progress-track">
+                <div id="geminiWeeklyBar" class="progress-bar bar-warning" style="width: 62%;"></div>
+              </div>
+              <div class="quota-footer-row">
+                <span class="reset-countdown">􀐫 Resets in 2d 18h</span>
               </div>
             </div>
           </div>
@@ -1351,12 +1390,18 @@
 
     const claudeRollingVal = document.getElementById('claudeRollingVal');
     const claudeRollingBar = document.getElementById('claudeRollingBar');
+    const claudeWeeklyVal = document.getElementById('claudeWeeklyVal');
+    const claudeWeeklyBar = document.getElementById('claudeWeeklyBar');
 
     const codexRollingVal = document.getElementById('codexRollingVal');
     const codexRollingBar = document.getElementById('codexRollingBar');
+    const codexWeeklyVal = document.getElementById('codexWeeklyVal');
+    const codexWeeklyBar = document.getElementById('codexWeeklyBar');
 
     const geminiRollingVal = document.getElementById('geminiRollingVal');
     const geminiRollingBar = document.getElementById('geminiRollingBar');
+    const geminiWeeklyVal = document.getElementById('geminiWeeklyVal');
+    const geminiWeeklyBar = document.getElementById('geminiWeeklyBar');
 
     // Controls
     const radiusSlider = document.getElementById('radiusSlider');
@@ -1517,38 +1562,47 @@
         claudeLiveSlider.value = 25;
         document.getElementById('claudeLiveLabel').textContent = '25%';
         updateMetric(claudeRollingVal, claudeRollingBar, 25);
+        updateMetric(claudeWeeklyVal, claudeWeeklyBar, 18);
 
         codexLiveSlider.value = 20;
         document.getElementById('codexLiveLabel').textContent = '20%';
         updateMetric(codexRollingVal, codexRollingBar, 20);
+        updateMetric(codexWeeklyVal, codexWeeklyBar, 22);
 
         geminiLiveSlider.value = 35;
         document.getElementById('geminiLiveLabel').textContent = '35%';
         updateMetric(geminiRollingVal, geminiRollingBar, 35);
+        updateMetric(geminiWeeklyVal, geminiWeeklyBar, 30);
       } else if (type === 'warning') {
         claudeLiveSlider.value = 78;
         document.getElementById('claudeLiveLabel').textContent = '78%';
         updateMetric(claudeRollingVal, claudeRollingBar, 78);
+        updateMetric(claudeWeeklyVal, claudeWeeklyBar, 44);
 
         codexLiveSlider.value = 65;
         document.getElementById('codexLiveLabel').textContent = '65%';
         updateMetric(codexRollingVal, codexRollingBar, 65);
+        updateMetric(codexWeeklyVal, codexWeeklyBar, 52);
 
         geminiLiveSlider.value = 55;
         document.getElementById('geminiLiveLabel').textContent = '55%';
         updateMetric(geminiRollingVal, geminiRollingBar, 55);
+        updateMetric(geminiWeeklyVal, geminiWeeklyBar, 62);
       } else if (type === 'critical') {
         claudeLiveSlider.value = 92;
         document.getElementById('claudeLiveLabel').textContent = '92%';
         updateMetric(claudeRollingVal, claudeRollingBar, 92);
+        updateMetric(claudeWeeklyVal, claudeWeeklyBar, 86);
 
         codexLiveSlider.value = 88;
         document.getElementById('codexLiveLabel').textContent = '88%';
         updateMetric(codexRollingVal, codexRollingBar, 88);
+        updateMetric(codexWeeklyVal, codexWeeklyBar, 79);
 
         geminiLiveSlider.value = 96;
         document.getElementById('geminiLiveLabel').textContent = '96%';
         updateMetric(geminiRollingVal, geminiRollingBar, 96);
+        updateMetric(geminiWeeklyVal, geminiWeeklyBar, 91);
       }
       recalcOverallStatus();
       triggerRefreshAnimation();
