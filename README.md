@@ -16,9 +16,9 @@
     - 🔴 **Critical / Rate-Limited**: `> 85%`
   - Reset countdowns (e.g. `78% used • Resets in 1h 42m`).
 - **Provider Support**:
-  1. **Claude**: 5-hour rolling rate limits and weekly token caps.
-  2. **Codex**: Allowance usage and hourly rate limits.
-  3. **Antigravity / Gemini**: Active session quotas and model rate limits.
+  1. **Claude**: 5-hour rolling usage percentage and reset countdown.
+  2. **Codex**: 5-hour rolling usage percentage and reset countdown.
+  3. **Antigravity / Gemini**: 5-hour rolling usage percentage and reset countdown.
   4. **Mock Provider**: Zero-config mock dataset for offline design iteration and testing.
 - **Preferences & Configuration**:
   - Per-provider enable/disable toggles (customize per personal or work Mac).

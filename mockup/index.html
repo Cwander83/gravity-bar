@@ -1034,33 +1034,16 @@
               </div>
             </div>
 
-            <!-- 5-hour rolling limit -->
             <div class="quota-item">
               <div class="quota-header-row">
-                <span class="quota-label">5-Hour Message Window</span>
-                <span class="quota-numbers"><span id="claudeRollingVal" class="quota-percent" style="color: var(--status-warning);">78%</span> (35/45 msgs)</span>
+                <span class="quota-label">5-Hour Window</span>
+                <span class="quota-numbers"><span id="claudeRollingVal" class="quota-percent" style="color: var(--status-warning);">78%</span></span>
               </div>
               <div class="progress-track">
                 <div id="claudeRollingBar" class="progress-bar bar-warning" style="width: 78%;"></div>
               </div>
               <div class="quota-footer-row">
                 <span class="reset-countdown">􀐫 Resets in 1h 42m</span>
-                <span>10 msgs remaining</span>
-              </div>
-            </div>
-
-            <!-- Weekly usage cap -->
-            <div class="quota-item">
-              <div class="quota-header-row">
-                <span class="quota-label">Weekly Token Allowance</span>
-                <span class="quota-numbers"><span id="claudeWeeklyVal" class="quota-percent" style="color: var(--status-normal);">34%</span> (3.4M/10M tok)</span>
-              </div>
-              <div class="progress-track">
-                <div id="claudeWeeklyBar" class="progress-bar bar-normal" style="width: 34%;"></div>
-              </div>
-              <div class="quota-footer-row">
-                <span class="reset-countdown">􀐫 Resets Mon 00:00</span>
-                <span>6.6M tok left</span>
               </div>
             </div>
           </div>
@@ -1076,33 +1059,16 @@
               </div>
             </div>
 
-            <!-- Monthly allowance -->
             <div class="quota-item">
               <div class="quota-header-row">
-                <span class="quota-label">Monthly Allowance</span>
-                <span class="quota-numbers"><span id="codexMonthlyVal" class="quota-percent" style="color: var(--status-normal);">52%</span> (520 / 1,000 units)</span>
+                <span class="quota-label">5-Hour Window</span>
+                <span class="quota-numbers"><span id="codexRollingVal" class="quota-percent" style="color: var(--status-normal);">52%</span></span>
               </div>
               <div class="progress-track">
-                <div id="codexMonthlyBar" class="progress-bar bar-normal" style="width: 52%;"></div>
+                <div id="codexRollingBar" class="progress-bar bar-normal" style="width: 52%;"></div>
               </div>
               <div class="quota-footer-row">
-                <span class="reset-countdown">􀐫 Resets Nov 1 (18d)</span>
-                <span>480 units remaining</span>
-              </div>
-            </div>
-
-            <!-- Fast request rate limit -->
-            <div class="quota-item">
-              <div class="quota-header-row">
-                <span class="quota-label">Hourly Burst Rate Limit</span>
-                <span class="quota-numbers"><span id="codexHourlyVal" class="quota-percent" style="color: var(--status-normal);">38%</span> (380 / 1000 RPM)</span>
-              </div>
-              <div class="progress-track">
-                <div id="codexHourlyBar" class="progress-bar bar-normal" style="width: 38%;"></div>
-              </div>
-              <div class="quota-footer-row">
-                <span class="reset-countdown">􀐫 Window resets in 42m</span>
-                <span>620 RPM available</span>
+                <span class="reset-countdown">􀐫 Resets in 42m</span>
               </div>
             </div>
           </div>
@@ -1120,15 +1086,14 @@
 
             <div class="quota-item">
               <div class="quota-header-row">
-                <span class="quota-label">Active Session Rate Limit</span>
-                <span class="quota-numbers"><span id="geminiQuotaVal" class="quota-percent" style="color: var(--status-critical);">89%</span> (890/1000 RPM)</span>
+                <span class="quota-label">5-Hour Window</span>
+                <span class="quota-numbers"><span id="geminiRollingVal" class="quota-percent" style="color: var(--status-critical);">89%</span></span>
               </div>
               <div class="progress-track">
-                <div id="geminiQuotaBar" class="progress-bar bar-critical" style="width: 89%;"></div>
+                <div id="geminiRollingBar" class="progress-bar bar-critical" style="width: 89%;"></div>
               </div>
               <div class="quota-footer-row">
-                <span class="reset-countdown" style="color: var(--status-critical);">􀇾 Throttling soon • 24m</span>
-                <span>110 RPM buffer</span>
+                <span class="reset-countdown" style="color: var(--status-critical);">􀐫 Resets in 24m</span>
               </div>
             </div>
           </div>
@@ -1327,6 +1292,15 @@
           </div>
           <input type="range" class="range-slider" min="5" max="100" value="52" id="codexLiveSlider">
         </div>
+
+        <!-- 8. Gemini Live Slider -->
+        <div class="lab-control-item">
+          <div class="lab-control-label">
+            <span>Live Adjust Gemini</span>
+            <span id="geminiLiveLabel">89%</span>
+          </div>
+          <input type="range" class="range-slider" min="5" max="100" value="89" id="geminiLiveSlider">
+        </div>
       </div>
 
       <!-- Generated Design Tokens Preview -->
@@ -1377,16 +1351,12 @@
 
     const claudeRollingVal = document.getElementById('claudeRollingVal');
     const claudeRollingBar = document.getElementById('claudeRollingBar');
-    const claudeWeeklyVal = document.getElementById('claudeWeeklyVal');
-    const claudeWeeklyBar = document.getElementById('claudeWeeklyBar');
 
-    const codexMonthlyVal = document.getElementById('codexMonthlyVal');
-    const codexMonthlyBar = document.getElementById('codexMonthlyBar');
-    const codexHourlyVal = document.getElementById('codexHourlyVal');
-    const codexHourlyBar = document.getElementById('codexHourlyBar');
+    const codexRollingVal = document.getElementById('codexRollingVal');
+    const codexRollingBar = document.getElementById('codexRollingBar');
 
-    const geminiQuotaVal = document.getElementById('geminiQuotaVal');
-    const geminiQuotaBar = document.getElementById('geminiQuotaBar');
+    const geminiRollingVal = document.getElementById('geminiRollingVal');
+    const geminiRollingBar = document.getElementById('geminiRollingBar');
 
     // Controls
     const radiusSlider = document.getElementById('radiusSlider');
@@ -1394,6 +1364,7 @@
     const barHeightSlider = document.getElementById('barHeightSlider');
     const claudeLiveSlider = document.getElementById('claudeLiveSlider');
     const codexLiveSlider = document.getElementById('codexLiveSlider');
+    const geminiLiveSlider = document.getElementById('geminiLiveSlider');
     const copyCssTokensBtn = document.getElementById('copyCssTokensBtn');
     const tokenOutput = document.getElementById('tokenOutput');
     const mockModeToggle = document.getElementById('mockModeToggle');
@@ -1480,8 +1451,8 @@
     function recalcOverallStatus() {
       const activeValues = [];
       if (toggleClaude.checked) activeValues.push(parseInt(claudeRollingVal.textContent));
-      if (toggleCodex.checked) activeValues.push(parseInt(codexMonthlyVal.textContent));
-      if (toggleGemini.checked) activeValues.push(parseInt(geminiQuotaVal.textContent));
+      if (toggleCodex.checked) activeValues.push(parseInt(codexRollingVal.textContent));
+      if (toggleGemini.checked) activeValues.push(parseInt(geminiRollingVal.textContent));
 
       const maxPercent = activeValues.length > 0 ? Math.max(...activeValues) : 0;
       updateOverallUI(maxPercent);
@@ -1522,7 +1493,15 @@
     codexLiveSlider.addEventListener('input', (e) => {
       const val = parseInt(e.target.value);
       document.getElementById('codexLiveLabel').textContent = `${val}%`;
-      updateMetric(codexMonthlyVal, codexMonthlyBar, val);
+      updateMetric(codexRollingVal, codexRollingBar, val);
+      recalcOverallStatus();
+    });
+
+    // Live Slider for Gemini
+    geminiLiveSlider.addEventListener('input', (e) => {
+      const val = parseInt(e.target.value);
+      document.getElementById('geminiLiveLabel').textContent = `${val}%`;
+      updateMetric(geminiRollingVal, geminiRollingBar, val);
       recalcOverallStatus();
     });
 
@@ -1535,41 +1514,41 @@
       });
 
       if (type === 'healthy') {
-        claudeLiveSlider.value = 28;
-        document.getElementById('claudeLiveLabel').textContent = '28%';
-        updateMetric(claudeRollingVal, claudeRollingBar, 28);
-        updateMetric(claudeWeeklyVal, claudeWeeklyBar, 18);
+        claudeLiveSlider.value = 25;
+        document.getElementById('claudeLiveLabel').textContent = '25%';
+        updateMetric(claudeRollingVal, claudeRollingBar, 25);
 
-        codexLiveSlider.value = 24;
-        document.getElementById('codexLiveLabel').textContent = '24%';
-        updateMetric(codexMonthlyVal, codexMonthlyBar, 24);
-        updateMetric(codexHourlyVal, codexHourlyBar, 15);
+        codexLiveSlider.value = 20;
+        document.getElementById('codexLiveLabel').textContent = '20%';
+        updateMetric(codexRollingVal, codexRollingBar, 20);
 
-        updateMetric(geminiQuotaVal, geminiQuotaBar, 35);
+        geminiLiveSlider.value = 35;
+        document.getElementById('geminiLiveLabel').textContent = '35%';
+        updateMetric(geminiRollingVal, geminiRollingBar, 35);
       } else if (type === 'warning') {
         claudeLiveSlider.value = 78;
         document.getElementById('claudeLiveLabel').textContent = '78%';
         updateMetric(claudeRollingVal, claudeRollingBar, 78);
-        updateMetric(claudeWeeklyVal, claudeWeeklyBar, 34);
 
         codexLiveSlider.value = 65;
         document.getElementById('codexLiveLabel').textContent = '65%';
-        updateMetric(codexMonthlyVal, codexMonthlyBar, 65);
-        updateMetric(codexHourlyVal, codexHourlyBar, 48);
+        updateMetric(codexRollingVal, codexRollingBar, 65);
 
-        updateMetric(geminiQuotaVal, geminiQuotaBar, 55);
+        geminiLiveSlider.value = 55;
+        document.getElementById('geminiLiveLabel').textContent = '55%';
+        updateMetric(geminiRollingVal, geminiRollingBar, 55);
       } else if (type === 'critical') {
         claudeLiveSlider.value = 92;
         document.getElementById('claudeLiveLabel').textContent = '92%';
         updateMetric(claudeRollingVal, claudeRollingBar, 92);
-        updateMetric(claudeWeeklyVal, claudeWeeklyBar, 76);
 
         codexLiveSlider.value = 88;
         document.getElementById('codexLiveLabel').textContent = '88%';
-        updateMetric(codexMonthlyVal, codexMonthlyBar, 88);
-        updateMetric(codexHourlyVal, codexHourlyBar, 91);
+        updateMetric(codexRollingVal, codexRollingBar, 88);
 
-        updateMetric(geminiQuotaVal, geminiQuotaBar, 96);
+        geminiLiveSlider.value = 96;
+        document.getElementById('geminiLiveLabel').textContent = '96%';
+        updateMetric(geminiRollingVal, geminiRollingBar, 96);
       }
       recalcOverallStatus();
       triggerRefreshAnimation();
