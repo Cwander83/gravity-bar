@@ -33,6 +33,8 @@ Package.pins
 *.ipa
 *.dSYM.zip
 *.dSYM
+dist/
+
 
 # Environment / Secrets
 .env

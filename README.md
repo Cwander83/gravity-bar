@@ -39,11 +39,14 @@ gravity-bar/
 │       └── security.yml      # Gitleaks automated secret scanning
 ├── mockup/
 │   └── index.html           # Interactive HTML/CSS prototype & style lab
+├── scripts/
+│   └── build_app.sh         # Release build and .app bundle packager
 ├── Sources/
 │   └── GravityBar/
 │       ├── GravityBarApp.swift
 │       ├── StatusBarController.swift
 │       ├── Models/
+│       │   ├── GravityBarTokens.swift
 │       │   └── UsageMetric.swift
 │       ├── Services/
 │       │   ├── UsageManager.swift
@@ -52,6 +55,7 @@ gravity-bar/
 │           ├── PopoverView.swift
 │           ├── UsageMetricRowView.swift
 │           └── SettingsView.swift
+├── Makefile
 ├── Package.swift
 ├── .gitignore
 └── README.md
@@ -70,18 +74,22 @@ gravity-bar/
 ## Quick Start
 
 ### 1. Build and Run Native App
-Build the native macOS menu bar application using Swift Package Manager:
+Build the native macOS menu bar application using either `make` or Swift Package Manager:
 
 ```bash
-# Build binary
-swift build
-
 # Run automated self-tests
-swift run GravityBar --test
+make test
 
-# Launch GravityBar in the menu bar
-swift run GravityBar
+# Launch GravityBar in the menu bar (live development)
+make run
+
+# Build standalone macOS Application bundle (dist/GravityBar.app)
+make app
+
+# Install GravityBar to /Applications
+make install
 ```
+
 
 > **Note**: When GravityBar launches, it docks in your macOS menu bar with a gauge icon and quota percentage. Click the menu bar item or hover over it to inspect the popover.
 

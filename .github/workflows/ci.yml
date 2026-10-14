@@ -26,9 +26,13 @@ jobs:
 
       - name: Build & Test Swift Package
         run: |
-          if [ -f "Package.swift" ]; then
-            swift build -v
-            swift run GravityBar --test
-          else
-            echo "Package.swift not present yet. Skipping Swift build."
-          fi
+          swift build -v
+          swift run GravityBar --test
+
+      - name: Verify App Bundle Packaging
+        run: |
+          chmod +x scripts/build_app.sh
+          ./scripts/build_app.sh
+          test -f "dist/GravityBar.app/Contents/MacOS/GravityBar"
+          test -f "dist/GravityBar.app/Contents/Info.plist"
+
