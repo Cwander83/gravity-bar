@@ -1023,78 +1023,84 @@
         <!-- Provider Metrics Rows -->
         <div class="popover-body">
 
-          <!-- 1. Claude Code CLI -->
-          <div class="provider-card">
+          <!-- 1. Claude -->
+          <div class="provider-card" id="cardClaude">
             <div class="provider-header">
               <div class="provider-meta">
                 <div class="provider-icon icon-claude">C</div>
                 <div>
-                  <div class="provider-name">Claude Code CLI</div>
+                  <div class="provider-name">Claude</div>
                 </div>
               </div>
-              <span class="provider-plan">Max Tier</span>
             </div>
 
-            <!-- 5-hour rolling limit -->
             <div class="quota-item">
               <div class="quota-header-row">
-                <span class="quota-label">5-Hour Rolling Limit</span>
-                <span class="quota-numbers"><span id="claudeRollingVal" class="quota-percent" style="color: var(--status-warning);">78%</span> (156/200 req)</span>
+                <span class="quota-label">5-Hour Window</span>
+                <span class="quota-numbers"><span id="claudeRollingVal" class="quota-percent" style="color: var(--status-warning);">78%</span></span>
               </div>
               <div class="progress-track">
                 <div id="claudeRollingBar" class="progress-bar bar-warning" style="width: 78%;"></div>
               </div>
               <div class="quota-footer-row">
                 <span class="reset-countdown">􀐫 Resets in 1h 42m</span>
-                <span>~24 req remaining</span>
               </div>
             </div>
 
-            <!-- Weekly usage cap -->
             <div class="quota-item">
               <div class="quota-header-row">
-                <span class="quota-label">Weekly Usage Cap</span>
-                <span class="quota-numbers"><span id="claudeWeeklyVal" class="quota-percent" style="color: var(--status-normal);">34%</span> (3.4M/10M tok)</span>
+                <span class="quota-label">Weekly Window</span>
+                <span class="quota-numbers"><span id="claudeWeeklyVal" class="quota-percent" style="color: var(--status-normal);">34%</span></span>
               </div>
               <div class="progress-track">
                 <div id="claudeWeeklyBar" class="progress-bar bar-normal" style="width: 34%;"></div>
               </div>
               <div class="quota-footer-row">
-                <span class="reset-countdown">􀐫 Resets Mon 00:00</span>
-                <span>6.6M tok left</span>
+                <span class="reset-countdown">􀐫 Resets in 3d 14h</span>
               </div>
             </div>
           </div>
 
-          <!-- 2. Claude Pro / Team Web -->
-          <div class="provider-card">
+          <!-- 2. Codex -->
+          <div class="provider-card" id="cardCodex">
             <div class="provider-header">
               <div class="provider-meta">
-                <div class="provider-icon icon-claude" style="background: #ea580c;">W</div>
+                <div class="provider-icon" style="background: linear-gradient(135deg, #10a37f, #059669); color: #fff;">⚡</div>
                 <div>
-                  <div class="provider-name">Claude Pro Web</div>
+                  <div class="provider-name">Codex</div>
                 </div>
               </div>
-              <span class="provider-plan">Team Seat</span>
             </div>
 
             <div class="quota-item">
               <div class="quota-header-row">
-                <span class="quota-label">Current Message Window</span>
-                <span class="quota-numbers"><span id="claudeWebVal" class="quota-percent" style="color: var(--status-normal);">22%</span> (10/45 msgs)</span>
+                <span class="quota-label">5-Hour Window</span>
+                <span class="quota-numbers"><span id="codexRollingVal" class="quota-percent" style="color: var(--status-normal);">52%</span></span>
               </div>
               <div class="progress-track">
-                <div id="claudeWebBar" class="progress-bar bar-normal" style="width: 22%;"></div>
+                <div id="codexRollingBar" class="progress-bar bar-normal" style="width: 52%;"></div>
               </div>
               <div class="quota-footer-row">
-                <span class="reset-countdown">􀐫 Resets at 22:30 EDT</span>
-                <span>35 msgs remaining</span>
+                <span class="reset-countdown">􀐫 Resets in 42m</span>
+              </div>
+            </div>
+
+            <div class="quota-item">
+              <div class="quota-header-row">
+                <span class="quota-label">Weekly Window</span>
+                <span class="quota-numbers"><span id="codexWeeklyVal" class="quota-percent" style="color: var(--status-normal);">41%</span></span>
+              </div>
+              <div class="progress-track">
+                <div id="codexWeeklyBar" class="progress-bar bar-normal" style="width: 41%;"></div>
+              </div>
+              <div class="quota-footer-row">
+                <span class="reset-countdown">􀐫 Resets in 4d 8h</span>
               </div>
             </div>
           </div>
 
-          <!-- 3. Google Antigravity / Gemini -->
-          <div class="provider-card">
+          <!-- 3. Antigravity / Gemini -->
+          <div class="provider-card" id="cardGemini">
             <div class="provider-header">
               <div class="provider-meta">
                 <div class="provider-icon icon-gemini">G</div>
@@ -1102,20 +1108,31 @@
                   <div class="provider-name">Antigravity / Gemini</div>
                 </div>
               </div>
-              <span class="provider-plan">Pro Quota</span>
             </div>
 
             <div class="quota-item">
               <div class="quota-header-row">
-                <span class="quota-label">Active Session Rate Limit</span>
-                <span class="quota-numbers"><span id="geminiQuotaVal" class="quota-percent" style="color: var(--status-critical);">89%</span> (890/1000 RPM)</span>
+                <span class="quota-label">5-Hour Window</span>
+                <span class="quota-numbers"><span id="geminiRollingVal" class="quota-percent" style="color: var(--status-critical);">89%</span></span>
               </div>
               <div class="progress-track">
-                <div id="geminiQuotaBar" class="progress-bar bar-critical" style="width: 89%;"></div>
+                <div id="geminiRollingBar" class="progress-bar bar-critical" style="width: 89%;"></div>
               </div>
               <div class="quota-footer-row">
-                <span class="reset-countdown" style="color: var(--status-critical);">􀇾 Throttling soon • 24m</span>
-                <span>110 RPM buffer</span>
+                <span class="reset-countdown" style="color: var(--status-critical);">􀐫 Resets in 24m</span>
+              </div>
+            </div>
+
+            <div class="quota-item">
+              <div class="quota-header-row">
+                <span class="quota-label">Weekly Window</span>
+                <span class="quota-numbers"><span id="geminiWeeklyVal" class="quota-percent" style="color: var(--status-warning);">62%</span></span>
+              </div>
+              <div class="progress-track">
+                <div id="geminiWeeklyBar" class="progress-bar bar-warning" style="width: 62%;"></div>
+              </div>
+              <div class="quota-footer-row">
+                <span class="reset-countdown">􀐫 Resets in 2d 18h</span>
               </div>
             </div>
           </div>
@@ -1159,13 +1176,47 @@
             </div>
 
             <div class="settings-group">
-              <label class="settings-label">Claude CLI Log / State Path</label>
-              <input type="text" class="input-field" value="~/.claude/state.json" spellcheck="false">
+              <label class="settings-label">Active Providers (Toggle Per Machine)</label>
+              
+              <div class="toggle-row" style="margin-bottom: 6px;">
+                <div class="toggle-info">
+                  <h4>Claude</h4>
+                  <p>Message window & token usage</p>
+                </div>
+                <label class="switch">
+                  <input type="checkbox" checked id="toggleClaudeProvider">
+                  <span class="slider"></span>
+                </label>
+              </div>
+
+              <div class="toggle-row" style="margin-bottom: 6px;">
+                <div class="toggle-info">
+                  <h4>Codex</h4>
+                  <p>Monthly allowance & burst limits</p>
+                </div>
+                <label class="switch">
+                  <input type="checkbox" checked id="toggleCodexProvider">
+                  <span class="slider"></span>
+                </label>
+              </div>
+
+              <div class="toggle-row">
+                <div class="toggle-info">
+                  <h4>Antigravity / Gemini</h4>
+                  <p>Session RPM and quota limits</p>
+                </div>
+                <label class="switch">
+                  <input type="checkbox" checked id="toggleGeminiProvider">
+                  <span class="slider"></span>
+                </label>
+              </div>
             </div>
 
             <div class="settings-group">
-              <label class="settings-label">Antigravity / Gemini CLI Cache</label>
-              <input type="text" class="input-field" value="~/.gemini/antigravity-ide/metrics.json" spellcheck="false">
+              <label class="settings-label">Credentials & Local State Paths</label>
+              <input type="text" class="input-field" value="~/.claude/state.json" spellcheck="false" placeholder="Claude state path" style="margin-bottom: 6px;">
+              <input type="text" class="input-field" value="~/.codex/session.json" spellcheck="false" placeholder="Codex work session token/cache" style="margin-bottom: 6px;">
+              <input type="text" class="input-field" value="~/.gemini/antigravity-ide/metrics.json" spellcheck="false" placeholder="Gemini cache path">
             </div>
 
             <div class="settings-group">
@@ -1266,10 +1317,28 @@
         <!-- 6. Custom Interactive Limit Slider -->
         <div class="lab-control-item">
           <div class="lab-control-label">
-            <span>Live Adjust Claude CLI</span>
+            <span>Live Adjust Claude</span>
             <span id="claudeLiveLabel">78%</span>
           </div>
           <input type="range" class="range-slider" min="5" max="100" value="78" id="claudeLiveSlider">
+        </div>
+
+        <!-- 7. Codex Live Slider -->
+        <div class="lab-control-item">
+          <div class="lab-control-label">
+            <span>Live Adjust Codex</span>
+            <span id="codexLiveLabel">52%</span>
+          </div>
+          <input type="range" class="range-slider" min="5" max="100" value="52" id="codexLiveSlider">
+        </div>
+
+        <!-- 8. Gemini Live Slider -->
+        <div class="lab-control-item">
+          <div class="lab-control-label">
+            <span>Live Adjust Gemini</span>
+            <span id="geminiLiveLabel">89%</span>
+          </div>
+          <input type="range" class="range-slider" min="5" max="100" value="89" id="geminiLiveSlider">
         </div>
       </div>
 
@@ -1310,20 +1379,37 @@
     const summaryCircleLabel = document.getElementById('summaryCircleLabel');
     const summaryStatusText = document.getElementById('summaryStatusText');
 
+    // Provider Cards & Toggles
+    const cardClaude = document.getElementById('cardClaude');
+    const cardCodex = document.getElementById('cardCodex');
+    const cardGemini = document.getElementById('cardGemini');
+
+    const toggleClaude = document.getElementById('toggleClaudeProvider');
+    const toggleCodex = document.getElementById('toggleCodexProvider');
+    const toggleGemini = document.getElementById('toggleGeminiProvider');
+
     const claudeRollingVal = document.getElementById('claudeRollingVal');
     const claudeRollingBar = document.getElementById('claudeRollingBar');
     const claudeWeeklyVal = document.getElementById('claudeWeeklyVal');
     const claudeWeeklyBar = document.getElementById('claudeWeeklyBar');
-    const claudeWebVal = document.getElementById('claudeWebVal');
-    const claudeWebBar = document.getElementById('claudeWebBar');
-    const geminiQuotaVal = document.getElementById('geminiQuotaVal');
-    const geminiQuotaBar = document.getElementById('geminiQuotaBar');
+
+    const codexRollingVal = document.getElementById('codexRollingVal');
+    const codexRollingBar = document.getElementById('codexRollingBar');
+    const codexWeeklyVal = document.getElementById('codexWeeklyVal');
+    const codexWeeklyBar = document.getElementById('codexWeeklyBar');
+
+    const geminiRollingVal = document.getElementById('geminiRollingVal');
+    const geminiRollingBar = document.getElementById('geminiRollingBar');
+    const geminiWeeklyVal = document.getElementById('geminiWeeklyVal');
+    const geminiWeeklyBar = document.getElementById('geminiWeeklyBar');
 
     // Controls
     const radiusSlider = document.getElementById('radiusSlider');
     const blurSlider = document.getElementById('blurSlider');
     const barHeightSlider = document.getElementById('barHeightSlider');
     const claudeLiveSlider = document.getElementById('claudeLiveSlider');
+    const codexLiveSlider = document.getElementById('codexLiveSlider');
+    const geminiLiveSlider = document.getElementById('geminiLiveSlider');
     const copyCssTokensBtn = document.getElementById('copyCssTokensBtn');
     const tokenOutput = document.getElementById('tokenOutput');
     const mockModeToggle = document.getElementById('mockModeToggle');
@@ -1337,6 +1423,17 @@
       settingsPanel.classList.remove('open');
       triggerRefreshAnimation();
     });
+
+    // Provider Toggles for Machine Profiles (Work vs Personal Mac)
+    function syncProviderCards() {
+      cardClaude.style.display = toggleClaude.checked ? 'flex' : 'none';
+      cardCodex.style.display = toggleCodex.checked ? 'flex' : 'none';
+      cardGemini.style.display = toggleGemini.checked ? 'flex' : 'none';
+      recalcOverallStatus();
+    }
+    toggleClaude.addEventListener('change', syncProviderCards);
+    toggleCodex.addEventListener('change', syncProviderCards);
+    toggleGemini.addEventListener('change', syncProviderCards);
 
     // Mock Mode Toggle
     mockModeToggle.addEventListener('change', (e) => {
@@ -1388,12 +1485,22 @@
     }
 
     // Set Quota Helper
-    function updateMetric(valElem, barElem, percent, total, unit) {
+    function updateMetric(valElem, barElem, percent) {
       const { cls, color } = getStatusClass(percent);
       valElem.textContent = `${percent}%`;
       valElem.style.color = color;
       barElem.className = `progress-bar ${cls}`;
       barElem.style.width = `${percent}%`;
+    }
+
+    function recalcOverallStatus() {
+      const activeValues = [];
+      if (toggleClaude.checked) activeValues.push(parseInt(claudeRollingVal.textContent));
+      if (toggleCodex.checked) activeValues.push(parseInt(codexRollingVal.textContent));
+      if (toggleGemini.checked) activeValues.push(parseInt(geminiRollingVal.textContent));
+
+      const maxPercent = activeValues.length > 0 ? Math.max(...activeValues) : 0;
+      updateOverallUI(maxPercent);
     }
 
     function updateOverallUI(percent) {
@@ -1419,12 +1526,28 @@
       }
     }
 
-    // Live Slider for Claude CLI
+    // Live Slider for Claude
     claudeLiveSlider.addEventListener('input', (e) => {
       const val = parseInt(e.target.value);
       document.getElementById('claudeLiveLabel').textContent = `${val}%`;
       updateMetric(claudeRollingVal, claudeRollingBar, val);
-      updateOverallUI(Math.max(val, parseInt(geminiQuotaVal.textContent)));
+      recalcOverallStatus();
+    });
+
+    // Live Slider for Codex
+    codexLiveSlider.addEventListener('input', (e) => {
+      const val = parseInt(e.target.value);
+      document.getElementById('codexLiveLabel').textContent = `${val}%`;
+      updateMetric(codexRollingVal, codexRollingBar, val);
+      recalcOverallStatus();
+    });
+
+    // Live Slider for Gemini
+    geminiLiveSlider.addEventListener('input', (e) => {
+      const val = parseInt(e.target.value);
+      document.getElementById('geminiLiveLabel').textContent = `${val}%`;
+      updateMetric(geminiRollingVal, geminiRollingBar, val);
+      recalcOverallStatus();
     });
 
     // Predefined Scenarios
@@ -1436,30 +1559,52 @@
       });
 
       if (type === 'healthy') {
-        claudeLiveSlider.value = 28;
-        document.getElementById('claudeLiveLabel').textContent = '28%';
-        updateMetric(claudeRollingVal, claudeRollingBar, 28);
+        claudeLiveSlider.value = 25;
+        document.getElementById('claudeLiveLabel').textContent = '25%';
+        updateMetric(claudeRollingVal, claudeRollingBar, 25);
         updateMetric(claudeWeeklyVal, claudeWeeklyBar, 18);
-        updateMetric(claudeWebVal, claudeWebBar, 12);
-        updateMetric(geminiQuotaVal, geminiQuotaBar, 35);
-        updateOverallUI(35);
+
+        codexLiveSlider.value = 20;
+        document.getElementById('codexLiveLabel').textContent = '20%';
+        updateMetric(codexRollingVal, codexRollingBar, 20);
+        updateMetric(codexWeeklyVal, codexWeeklyBar, 22);
+
+        geminiLiveSlider.value = 35;
+        document.getElementById('geminiLiveLabel').textContent = '35%';
+        updateMetric(geminiRollingVal, geminiRollingBar, 35);
+        updateMetric(geminiWeeklyVal, geminiWeeklyBar, 30);
       } else if (type === 'warning') {
         claudeLiveSlider.value = 78;
         document.getElementById('claudeLiveLabel').textContent = '78%';
         updateMetric(claudeRollingVal, claudeRollingBar, 78);
-        updateMetric(claudeWeeklyVal, claudeWeeklyBar, 34);
-        updateMetric(claudeWebVal, claudeWebBar, 22);
-        updateMetric(geminiQuotaVal, geminiQuotaBar, 55);
-        updateOverallUI(78);
+        updateMetric(claudeWeeklyVal, claudeWeeklyBar, 44);
+
+        codexLiveSlider.value = 65;
+        document.getElementById('codexLiveLabel').textContent = '65%';
+        updateMetric(codexRollingVal, codexRollingBar, 65);
+        updateMetric(codexWeeklyVal, codexWeeklyBar, 52);
+
+        geminiLiveSlider.value = 55;
+        document.getElementById('geminiLiveLabel').textContent = '55%';
+        updateMetric(geminiRollingVal, geminiRollingBar, 55);
+        updateMetric(geminiWeeklyVal, geminiWeeklyBar, 62);
       } else if (type === 'critical') {
         claudeLiveSlider.value = 92;
         document.getElementById('claudeLiveLabel').textContent = '92%';
         updateMetric(claudeRollingVal, claudeRollingBar, 92);
-        updateMetric(claudeWeeklyVal, claudeWeeklyBar, 76);
-        updateMetric(claudeWebVal, claudeWebBar, 84);
-        updateMetric(geminiQuotaVal, geminiQuotaBar, 96);
-        updateOverallUI(96);
+        updateMetric(claudeWeeklyVal, claudeWeeklyBar, 86);
+
+        codexLiveSlider.value = 88;
+        document.getElementById('codexLiveLabel').textContent = '88%';
+        updateMetric(codexRollingVal, codexRollingBar, 88);
+        updateMetric(codexWeeklyVal, codexWeeklyBar, 79);
+
+        geminiLiveSlider.value = 96;
+        document.getElementById('geminiLiveLabel').textContent = '96%';
+        updateMetric(geminiRollingVal, geminiRollingBar, 96);
+        updateMetric(geminiWeeklyVal, geminiWeeklyBar, 91);
       }
+      recalcOverallStatus();
       triggerRefreshAnimation();
     };
 
@@ -1519,7 +1664,7 @@
     });
 
     // Initial sync
-    updateOverallUI(78);
+    recalcOverallStatus();
   </script>
 </body>
 </html>
