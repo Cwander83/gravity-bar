@@ -101,7 +101,7 @@ To connect live accounts:
 2. Toggle off **Mock Provider Mode**.
 3. Enable or disable providers (customize for work Mac with Codex or personal Mac with Claude/Gemini).
 4. Specify paths to local state/session files:
-   - **Claude**: `~/.claude/state.json`
+   - **Claude**: `~/Library/Application Support/Claude/plan-usage-history.json` (Claude Desktop plan usage). Claude Code CLI token usage is read automatically from `~/.claude/projects/**/*.jsonl`.
    - **Codex**: `~/.codex/session.json`
    - **Gemini**: `~/.gemini/antigravity-ide/metrics.json`
 5. Click **Apply & Close**. If local files are not yet present, GravityBar gracefully falls back to synthetic mock values without crashing.

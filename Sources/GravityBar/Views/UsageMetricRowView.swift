@@ -31,6 +31,10 @@ public struct UsageMetricRowView: View {
                     groupSectionView(group: group)
                 }
             }
+
+            if let cli = usage.cliTokenUsage {
+                cliTokenUsageView(cli)
+            }
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 12)
@@ -84,6 +88,29 @@ public struct UsageMetricRowView: View {
                 startPoint: .topLeading,
                 endPoint: .bottomTrailing
             ))
+        }
+    }
+
+    private func cliTokenUsageView(_ cli: CLITokenUsage) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text("CLAUDE CODE CLI")
+                .font(.system(size: 9, weight: .black))
+                .foregroundColor(.secondary)
+
+            tokenRow(label: "Last 5h", usage: cli.last5h)
+            tokenRow(label: "Last 7d", usage: cli.last7d)
+        }
+    }
+
+    private func tokenRow(label: String, usage: TokenUsage) -> some View {
+        HStack {
+            Text(label)
+                .font(.system(size: 11, weight: .medium))
+                .foregroundColor(.secondary)
+            Spacer()
+            Text(usage.summary)
+                .font(.system(size: 10, weight: .semibold, design: .monospaced))
+                .foregroundColor(.primary)
         }
     }
 

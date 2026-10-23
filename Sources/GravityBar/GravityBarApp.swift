@@ -145,11 +145,69 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         assert(fractionalGroups?.first?.fiveHourMetric?.resetDate == fractionalReset, "Fractional resetTime must not fall back to now + 5h")
         print("✓ Antigravity multi-group merge tests passed")
 
+        // 3d. Claude window inference from plan-usage-history samples (CHR-58)
+        func planSamples(_ rows: [(minutesAgo: Double, fh: Int?, sd: Int?)]) -> Data {
+            let items = rows.map { row -> String in
+                let t = Int((now.timeIntervalSince1970 - row.minutesAgo * 60) * 1000)
+                let fields = [row.fh.map { "\"fh\":\($0)" }, row.sd.map { "\"sd\":\($0)" }].compactMap { $0 }
+                return "{\"t\":\(t),\"org\":\"x\",\"u\":{\(fields.joined(separator: ","))}}"
+            }
+            return Data("{\"version\":1,\"samples\":[\(items.joined(separator: ","))]}".utf8)
+        }
+        func windows(_ data: Data) -> (UsageMetric, UsageMetric) {
+            let samples = ClaudeProvider.parseSamples(from: data)
+            return (
+                ClaudeProvider.currentWindow(samples: samples, value: \.fiveHour, windowType: .fiveHour, length: 5 * 3600, now: now),
+                ClaudeProvider.currentWindow(samples: samples, value: \.weekly, windowType: .weekly, length: 7 * 86400, now: now)
+            )
+        }
+
+        // Active window: reset counts down from the first non-zero sample, not from the latest sample
+        let (activeFH, activeSD) = windows(planSamples([(70, 0, 0), (60, 7, 3), (30, 15, 4), (5, nil, nil), (1, 23, 5)]))
+        assert(activeFH.usedPercent == 23 && abs(activeFH.resetDate.timeIntervalSince(now) - (5 * 3600 - 60 * 60)) < 1)
+        assert(activeSD.usedPercent == 5 && abs(activeSD.resetDate.timeIntervalSince(now) - (7 * 86400 - 60 * 60)) < 1)
+
+        // Step down means the window reset between samples: new window starts at the lower reading
+        let (steppedFH, _) = windows(planSamples([(200, 40, 10), (120, 5, 10)]))
+        assert(steppedFH.usedPercent == 5 && abs(steppedFH.resetDate.timeIntervalSince(now) - (5 * 3600 - 120 * 60)) < 1)
+
+        // Stale: Claude closed for 6h, so the 5h window expired and decays to 0%; weekly still active
+        let (staleFH, staleSD) = windows(planSamples([(400, 60, 20), (360, 78, 22)]))
+        assert(staleFH.usedPercent == 0 && staleSD.usedPercent == 22)
+
+        // Weekly expires after 7 days
+        let (_, expiredSD) = windows(planSamples([(8 * 24 * 60, 50, 30)]))
+        assert(expiredSD.usedPercent == 0)
+        print("✓ Claude window inference tests passed")
+
+        // 3e. Claude Code CLI token aggregation de-duplicates streamed message ids
+        func cliLine(_ id: String, minutesAgo: Double, input: Int, output: Int) -> String {
+            let stamp = ISO8601DateFormatter().string(from: now.addingTimeInterval(-minutesAgo * 60))
+            return "{\"type\":\"assistant\",\"timestamp\":\"\(stamp)\",\"message\":{\"id\":\"\(id)\",\"usage\":{\"input_tokens\":\(input),\"output_tokens\":\(output),\"cache_read_input_tokens\":100,\"cache_creation_input_tokens\":10}}}"
+        }
+        let transcript = Data([
+            cliLine("msg_a", minutesAgo: 10, input: 5, output: 50),
+            cliLine("msg_a", minutesAgo: 10, input: 5, output: 50),       // streamed duplicate
+            "{\"type\":\"user\",\"message\":{\"role\":\"user\"}}",
+            cliLine("msg_b", minutesAgo: 6 * 60, input: 7, output: 70),   // 7d only
+            cliLine("msg_c", minutesAgo: 8 * 24 * 60, input: 9, output: 90) // outside 7d
+        ].joined(separator: "\n").utf8)
+        let cli = ClaudeCodeUsageScanner.aggregate(ClaudeCodeUsageScanner.parseEntries(from: transcript), now: now)
+        assert(cli.last5h == TokenUsage(inputTokens: 5, outputTokens: 50, cacheReadTokens: 100, cacheCreationTokens: 10))
+        assert(cli.last7d == TokenUsage(inputTokens: 12, outputTokens: 120, cacheReadTokens: 200, cacheCreationTokens: 20))
+        assert(TokenUsage.compact(950) == "950" && TokenUsage.compact(12_300) == "12.3K" && TokenUsage.compact(4_500_000) == "4.5M")
+        print("✓ Claude Code CLI token aggregation tests passed")
+
         // 4. Claude Real Data Provider Test
         let claudeProv = ClaudeProvider()
         if let u = try? await claudeProv.fetchUsage() {
             assert(u.provider == .claude)
             print("✓ Claude real data provider parsed: 5h=\(Int(u.fiveHourMetric.usedPercent))% used, weekly=\(Int(u.weeklyMetric.usedPercent))% used")
+            print("    • 5h resets: \(u.fiveHourMetric.formattedReset()), weekly: \(u.weeklyMetric.formattedReset())")
+            if let cli = u.cliTokenUsage {
+                print("    • Claude Code CLI last 5h: \(cli.last5h.summary)")
+                print("    • Claude Code CLI last 7d: \(cli.last7d.summary)")
+            }
         }
 
         // 5. Antigravity Real Data Provider Test
