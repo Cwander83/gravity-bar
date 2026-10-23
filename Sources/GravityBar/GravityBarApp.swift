@@ -196,6 +196,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         assert(cli.last5h == TokenUsage(inputTokens: 5, outputTokens: 50, cacheReadTokens: 100, cacheCreationTokens: 10))
         assert(cli.last7d == TokenUsage(inputTokens: 12, outputTokens: 120, cacheReadTokens: 200, cacheCreationTokens: 20))
         assert(TokenUsage.compact(950) == "950" && TokenUsage.compact(12_300) == "12.3K" && TokenUsage.compact(4_500_000) == "4.5M")
+        assert(TokenUsage.compact(342_000) == "342K" && TokenUsage.compact(1_000) == "1K" && TokenUsage.compact(2_000_000_000) == "2B")
         print("✓ Claude Code CLI token aggregation tests passed")
 
         // 4. Claude Real Data Provider Test

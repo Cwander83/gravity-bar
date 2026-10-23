@@ -168,13 +168,18 @@ public struct TokenUsage: Codable, Equatable {
         "\(TokenUsage.compact(inputTokens)) in • \(TokenUsage.compact(outputTokens)) out • \(TokenUsage.compact(cacheTokens)) cache"
     }
 
-    /// Compact count: 950, 12.3K, 4.5M, 1.2B.
+    /// Compact count: 950, 12.3K, 342K, 4.5M, 1.2B (a trailing ".0" is dropped).
     public static func compact(_ count: Int) -> String {
+        func scaled(_ value: Double, _ suffix: String) -> String {
+            let text = String(format: "%.1f", value)
+            return (text.hasSuffix(".0") ? String(text.dropLast(2)) : text) + suffix
+        }
+
         let value = Double(count)
         switch value {
-        case 1_000_000_000...: return String(format: "%.1fB", value / 1_000_000_000)
-        case 1_000_000...: return String(format: "%.1fM", value / 1_000_000)
-        case 1_000...: return String(format: "%.1fK", value / 1_000)
+        case 1_000_000_000...: return scaled(value / 1_000_000_000, "B")
+        case 1_000_000...: return scaled(value / 1_000_000, "M")
+        case 1_000...: return scaled(value / 1_000, "K")
         default: return "\(count)"
         }
     }
