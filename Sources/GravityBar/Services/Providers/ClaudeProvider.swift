@@ -119,7 +119,7 @@ enum ClaudeCodeUsageScanner {
     /// Parsed entries per file, reused while the file's modification date is unchanged.
     private static var cache: [String: (modified: Date, entries: [Entry])] = [:]
 
-    /// Returns nil when no transcripts were touched in the last 7 days (e.g. CLI not installed).
+    /// Returns nil when there is no CLI token usage in the last 7 days (e.g. CLI not installed or idle).
     static func scan(projectsPath: String, now: Date = Date()) -> CLITokenUsage? {
         let root = URL(fileURLWithPath: (projectsPath as NSString).expandingTildeInPath)
         let weekAgo = now.addingTimeInterval(-7 * 86400)
@@ -133,7 +133,6 @@ enum ClaudeCodeUsageScanner {
         }
 
         var entries: [Entry] = []
-        var sawRecentFile = false
         lock.lock()
         defer { lock.unlock() }
 
@@ -144,7 +143,6 @@ enum ClaudeCodeUsageScanner {
                   modified >= weekAgo else {
                 continue
             }
-            sawRecentFile = true
 
             if let cached = cache[url.path], cached.modified == modified {
                 entries.append(contentsOf: cached.entries)
@@ -155,8 +153,10 @@ enum ClaudeCodeUsageScanner {
             }
         }
 
-        guard sawRecentFile else { return nil }
-        return aggregate(entries, now: now)
+        // Old transcripts get touched by background indexing/cleanup, so a recent mtime alone does not
+        // mean recent usage. No tokens in the last 7 days means nothing to show.
+        let aggregated = aggregate(entries, now: now)
+        return aggregated.last7d.totalTokens > 0 ? aggregated : nil
     }
 
     /// Parses assistant lines carrying `message.usage` from one transcript.
@@ -191,12 +191,23 @@ enum ClaudeCodeUsageScanner {
     }
 
     /// Sums de-duplicated entries over rolling 5-hour and 7-day spans ending at `now`.
+    /// Streamed multi-block turns log the same `message.id` several times, and early lines can report
+    /// `output_tokens: 0`, so the line with the highest total wins (ties go to the later line).
     static func aggregate(_ entries: [Entry], now: Date = Date()) -> CLITokenUsage {
-        var seen = Set<String>()
+        var byId: [String: Entry] = [:]
+        for entry in entries {
+            if let existing = byId[entry.id],
+               existing.usage.totalTokens > entry.usage.totalTokens
+                || (existing.usage.totalTokens == entry.usage.totalTokens && existing.date > entry.date) {
+                continue
+            }
+            byId[entry.id] = entry
+        }
+
         var last5h = TokenUsage()
         var last7d = TokenUsage()
 
-        for entry in entries.sorted(by: { $0.date < $1.date }) where seen.insert(entry.id).inserted {
+        for entry in byId.values {
             let age = now.timeIntervalSince(entry.date)
             guard age >= 0, age <= 7 * 86400 else { continue }
             last7d = last7d + entry.usage

@@ -186,14 +186,25 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return "{\"type\":\"assistant\",\"timestamp\":\"\(stamp)\",\"message\":{\"id\":\"\(id)\",\"usage\":{\"input_tokens\":\(input),\"output_tokens\":\(output),\"cache_read_input_tokens\":100,\"cache_creation_input_tokens\":10}}}"
         }
         let transcript = Data([
-            cliLine("msg_a", minutesAgo: 10, input: 5, output: 50),
-            cliLine("msg_a", minutesAgo: 10, input: 5, output: 50),       // streamed duplicate
+            cliLine("msg_a", minutesAgo: 10.1, input: 5, output: 0),      // early streamed block reports 0 output
+            cliLine("msg_a", minutesAgo: 10, input: 5, output: 50),       // final line for the same message id
+            cliLine("msg_a", minutesAgo: 10, input: 5, output: 50),       // exact duplicate
             "{\"type\":\"user\",\"message\":{\"role\":\"user\"}}",
             cliLine("msg_b", minutesAgo: 6 * 60, input: 7, output: 70),   // 7d only
             cliLine("msg_c", minutesAgo: 8 * 24 * 60, input: 9, output: 90) // outside 7d
         ].joined(separator: "\n").utf8)
         let cli = ClaudeCodeUsageScanner.aggregate(ClaudeCodeUsageScanner.parseEntries(from: transcript), now: now)
         assert(cli.last5h == TokenUsage(inputTokens: 5, outputTokens: 50, cacheReadTokens: 100, cacheCreationTokens: 10))
+        assert(cli.last5h.outputTokens == 50, "Streamed message must keep its final output_tokens, not the early 0")
+
+        // A recently touched transcript holding only old messages must not surface an empty CLI section
+        let staleDir = FileManager.default.temporaryDirectory.appendingPathComponent("gravitybar-cli-\(UUID().uuidString)")
+        try? FileManager.default.createDirectory(at: staleDir, withIntermediateDirectories: true)
+        try? Data(cliLine("msg_old", minutesAgo: 30 * 24 * 60, input: 1, output: 1).utf8).write(to: staleDir.appendingPathComponent("old.jsonl"))
+        assert(ClaudeCodeUsageScanner.scan(projectsPath: staleDir.path, now: now) == nil)
+        try? Data(cliLine("msg_new", minutesAgo: 5, input: 1, output: 1).utf8).write(to: staleDir.appendingPathComponent("new.jsonl"))
+        assert(ClaudeCodeUsageScanner.scan(projectsPath: staleDir.path, now: now)?.last5h.outputTokens == 1)
+        try? FileManager.default.removeItem(at: staleDir)
         assert(cli.last7d == TokenUsage(inputTokens: 12, outputTokens: 120, cacheReadTokens: 200, cacheCreationTokens: 20))
         assert(TokenUsage.compact(950) == "950" && TokenUsage.compact(12_300) == "12.3K" && TokenUsage.compact(4_500_000) == "4.5M")
         assert(TokenUsage.compact(342_000) == "342K" && TokenUsage.compact(1_000) == "1K" && TokenUsage.compact(2_000_000_000) == "2B")
