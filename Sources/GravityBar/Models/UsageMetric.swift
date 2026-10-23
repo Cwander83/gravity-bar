@@ -6,10 +6,11 @@ public enum QuotaThreshold: String, Codable, CaseIterable, Comparable {
     case warning
     case critical
 
-    public static func from(percent: Double) -> QuotaThreshold {
-        if percent > 85.0 {
+    /// Classifies a consumption level. `usedPercent` is always percentage USED (0 = untouched, 100 = exhausted).
+    public static func from(usedPercent: Double) -> QuotaThreshold {
+        if usedPercent > 85.0 {
             return .critical
-        } else if percent >= 60.0 {
+        } else if usedPercent >= 60.0 {
             return .warning
         } else {
             return .normal
@@ -56,18 +57,43 @@ public enum ProviderType: String, Codable, CaseIterable, Identifiable {
 public struct UsageMetric: Identifiable, Codable, Equatable {
     public let id: UUID
     public var windowType: WindowType
-    public var percent: Double
+    /// Canonical consumption metric: percentage of the window USED (0–100).
+    /// Providers reporting remaining quota must convert via `init(windowType:remainingFraction:resetDate:)`.
+    public var usedPercent: Double
     public var resetDate: Date
 
-    public init(id: UUID = UUID(), windowType: WindowType, percent: Double, resetDate: Date) {
+    public init(id: UUID = UUID(), windowType: WindowType, usedPercent: Double, resetDate: Date) {
         self.id = id
         self.windowType = windowType
-        self.percent = max(0.0, min(100.0, percent))
+        self.usedPercent = max(0.0, min(100.0, usedPercent))
         self.resetDate = resetDate
     }
 
+    /// Builds a metric from a provider that reports the fraction of quota REMAINING (1.0 = untouched).
+    public init(id: UUID = UUID(), windowType: WindowType, remainingFraction: Double, resetDate: Date) {
+        self.init(id: id, windowType: windowType, usedPercent: UsageMetric.usedPercent(fromRemainingFraction: remainingFraction), resetDate: resetDate)
+    }
+
+    /// Converts a REMAINING fraction (1.0 = untouched) into a rounded USED percentage (0–100).
+    public static func usedPercent(fromRemainingFraction remainingFraction: Double) -> Double {
+        let remaining = max(0.0, min(1.0, remainingFraction))
+        return round((1.0 - remaining) * 100.0)
+    }
+
+    /// Percentage of the window still available (0–100).
+    public var remainingPercent: Double {
+        max(0.0, 100.0 - usedPercent)
+    }
+
+    /// Readout showing both polarities, e.g. "7% used • 93% left". Halves always sum to 100%.
+    public var usageSummary: String {
+        let used = Int(round(usedPercent))
+        let left = max(0, 100 - used)
+        return "\(used)% used • \(left)% left"
+    }
+
     public var threshold: QuotaThreshold {
-        QuotaThreshold.from(percent: percent)
+        QuotaThreshold.from(usedPercent: usedPercent)
     }
 
     /// Formats time remaining until reset into a clean human string (e.g. "Resets in 1h 42m").
@@ -110,7 +136,7 @@ public struct ProviderUsage: Identifiable, Codable, Equatable {
     }
 
     public var highestPercent: Double {
-        max(fiveHourMetric.percent, weeklyMetric.percent)
+        max(fiveHourMetric.usedPercent, weeklyMetric.usedPercent)
     }
 
     public var highestUrgency: QuotaThreshold {

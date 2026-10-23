@@ -27,7 +27,7 @@ public enum GravityBarTokens {
         }
     }
 
-    public static func colorFor(percent: Double) -> Color {
-        colorFor(threshold: QuotaThreshold.from(percent: percent))
+    public static func colorFor(usedPercent: Double) -> Color {
+        colorFor(threshold: QuotaThreshold.from(usedPercent: usedPercent))
     }
 }
