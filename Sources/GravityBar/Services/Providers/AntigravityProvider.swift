@@ -122,18 +122,21 @@ public final class AntigravityProvider: UsageProvider {
             }
         }
 
-        // Step C: Query RetrieveUserQuotaSummary
+        // Step C: Query RetrieveUserQuotaSummary on every language_server instance.
+        // Several IDE windows can each run a language_server, and only some report every group
+        // (e.g. "Gemini 4 Argon"), so walk PIDs/ports in sorted order and merge all responses.
         let sessionConfig = URLSessionConfiguration.ephemeral
         sessionConfig.timeoutIntervalForRequest = 1.5
         let delegate = LocalhostTrustDelegate()
         let session = URLSession(configuration: sessionConfig, delegate: delegate, delegateQueue: nil)
 
-        let isoFormatter = ISO8601DateFormatter()
         let now = Date()
+        var responses: [[QuotaGroup]] = []
 
-        for (pid, ports) in pidPorts {
-            guard let token = pidTokens[pid] else { continue }
-            for port in ports {
+        let sortedPids = pidPorts.keys.sorted { (Int($0) ?? 0) < (Int($1) ?? 0) }
+        for pid in sortedPids {
+            guard let token = pidTokens[pid], let ports = pidPorts[pid] else { continue }
+            for port in ports.sorted() {
                 guard let url = URL(string: "https://127.0.0.1:\(port)/exa.language_server_pb.LanguageServerService/RetrieveUserQuotaSummary") else {
                     continue
                 }
@@ -150,54 +153,9 @@ public final class AntigravityProvider: UsageProvider {
                         continue
                     }
 
-                    if let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-                       let respObj = json["response"] as? [String: Any],
-                       let groups = respObj["groups"] as? [[String: Any]] {
-
-                        var fiveHourRemaining = 1.0
-                        var weeklyRemaining = 1.0
-                        var resetFiveHour = now.addingTimeInterval(5 * 3600)
-                        var resetWeekly = now.addingTimeInterval(7 * 86400)
-
-                        for group in groups {
-                            let groupName = (group["displayName"] as? String) ?? ""
-                            guard groupName.contains("Gemini") || groupName.contains("Models") else { continue }
-
-                            if let buckets = group["buckets"] as? [[String: Any]] {
-                                for bucket in buckets {
-                                    let window = (bucket["window"] as? String) ?? ""
-                                    let remaining = (bucket["remainingFraction"] as? Double) ?? 1.0 // Fraction LEFT, not used (1.0 = untouched)
-
-                                    if let resetStr = bucket["resetTime"] as? String,
-                                       let parsedDate = isoFormatter.date(from: resetStr) {
-                                        if window == "5h" {
-                                            fiveHourRemaining = remaining
-                                            resetFiveHour = parsedDate
-                                        } else if window == "weekly" {
-                                            weeklyRemaining = remaining
-                                            resetWeekly = parsedDate
-                                        }
-                                    } else {
-                                        if window == "5h" { fiveHourRemaining = remaining }
-                                        else if window == "weekly" { weeklyRemaining = remaining }
-                                    }
-                                }
-                            }
-                        }
-
-                        return ProviderUsage(
-                            provider: .gemini,
-                            fiveHourMetric: UsageMetric(
-                                windowType: .fiveHour,
-                                remainingFraction: fiveHourRemaining,
-                                resetDate: resetFiveHour
-                            ),
-                            weeklyMetric: UsageMetric(
-                                windowType: .weekly,
-                                remainingFraction: weeklyRemaining,
-                                resetDate: resetWeekly
-                            )
-                        )
+                    if let groups = AntigravityProvider.parseQuotaGroups(from: data, now: now) {
+                        responses.append(groups)
+                        break // One answering port per PID is enough
                     }
                 } catch {
                     continue
@@ -205,7 +163,87 @@ public final class AntigravityProvider: UsageProvider {
             }
         }
 
-        return nil
+        guard !responses.isEmpty else { return nil }
+        return AntigravityProvider.makeUsage(groups: AntigravityProvider.mergeQuotaGroups(responses), now: now)
+    }
+
+    // MARK: - Quota Summary Parsing & Aggregation
+
+    /// Parses every group in a `RetrieveUserQuotaSummary` response. Returns nil when the payload has no `response.groups`.
+    static func parseQuotaGroups(from data: Data, now: Date = Date()) -> [QuotaGroup]? {
+        guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let respObj = json["response"] as? [String: Any],
+              let groups = respObj["groups"] as? [[String: Any]] else {
+            return nil
+        }
+
+        let isoFormatter = ISO8601DateFormatter()
+        return groups.compactMap { group in
+            guard let name = group["displayName"] as? String, !name.isEmpty else { return nil }
+            var parsed = QuotaGroup(name: name)
+
+            for bucket in (group["buckets"] as? [[String: Any]]) ?? [] {
+                let window = (bucket["window"] as? String) ?? ""
+                let remaining = (bucket["remainingFraction"] as? Double) ?? 1.0 // Fraction LEFT, not used (1.0 = untouched)
+                let parsedReset = (bucket["resetTime"] as? String).flatMap { isoFormatter.date(from: $0) }
+
+                if window == "5h" {
+                    parsed.fiveHourMetric = UsageMetric(
+                        windowType: .fiveHour,
+                        remainingFraction: remaining,
+                        resetDate: parsedReset ?? now.addingTimeInterval(5 * 3600)
+                    )
+                } else if window == "weekly" {
+                    parsed.weeklyMetric = UsageMetric(
+                        windowType: .weekly,
+                        remainingFraction: remaining,
+                        resetDate: parsedReset ?? now.addingTimeInterval(7 * 86400)
+                    )
+                }
+            }
+
+            return parsed.metrics.isEmpty ? nil : parsed
+        }
+    }
+
+    /// Merges groups from several language_server responses by group name, keeping the most-consumed
+    /// bucket per window. Group order follows first appearance, so output is stable for a given input order.
+    static func mergeQuotaGroups(_ responses: [[QuotaGroup]]) -> [QuotaGroup] {
+        var merged: [QuotaGroup] = []
+        for groups in responses {
+            for group in groups {
+                if let idx = merged.firstIndex(where: { $0.name == group.name }) {
+                    merged[idx].fiveHourMetric = mostConsumed(merged[idx].fiveHourMetric, group.fiveHourMetric)
+                    merged[idx].weeklyMetric = mostConsumed(merged[idx].weeklyMetric, group.weeklyMetric)
+                } else {
+                    merged.append(group)
+                }
+            }
+        }
+        return merged
+    }
+
+    /// Builds the provider usage: headline metrics are the most-consumed bucket per window across all groups.
+    static func makeUsage(groups: [QuotaGroup], now: Date = Date()) -> ProviderUsage {
+        let fiveHour = groups.compactMap { $0.fiveHourMetric }.reduce(nil, mostConsumed)
+        let weekly = groups.compactMap { $0.weeklyMetric }.reduce(nil, mostConsumed)
+
+        return ProviderUsage(
+            provider: .gemini,
+            fiveHourMetric: fiveHour ?? UsageMetric(windowType: .fiveHour, usedPercent: 0, resetDate: now.addingTimeInterval(5 * 3600)),
+            weeklyMetric: weekly ?? UsageMetric(windowType: .weekly, usedPercent: 0, resetDate: now.addingTimeInterval(7 * 86400)),
+            groups: groups
+        )
+    }
+
+    /// Picks the higher-usage metric; ties go to the earlier reset so the countdown stays conservative.
+    private static func mostConsumed(_ lhs: UsageMetric?, _ rhs: UsageMetric?) -> UsageMetric? {
+        guard let lhs else { return rhs }
+        guard let rhs else { return lhs }
+        if rhs.usedPercent != lhs.usedPercent {
+            return rhs.usedPercent > lhs.usedPercent ? rhs : lhs
+        }
+        return rhs.resetDate < lhs.resetDate ? rhs : lhs
     }
 }
 
