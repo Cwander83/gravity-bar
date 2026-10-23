@@ -177,7 +177,6 @@ public final class AntigravityProvider: UsageProvider {
             return nil
         }
 
-        let isoFormatter = ISO8601DateFormatter()
         return groups.compactMap { group in
             guard let name = group["displayName"] as? String, !name.isEmpty else { return nil }
             var parsed = QuotaGroup(name: name)
@@ -185,7 +184,7 @@ public final class AntigravityProvider: UsageProvider {
             for bucket in (group["buckets"] as? [[String: Any]]) ?? [] {
                 let window = (bucket["window"] as? String) ?? ""
                 let remaining = (bucket["remainingFraction"] as? Double) ?? 1.0 // Fraction LEFT, not used (1.0 = untouched)
-                let parsedReset = (bucket["resetTime"] as? String).flatMap { isoFormatter.date(from: $0) }
+                let parsedReset = (bucket["resetTime"] as? String).flatMap(parseResetTime)
 
                 if window == "5h" {
                     parsed.fiveHourMetric = UsageMetric(
@@ -206,8 +205,22 @@ public final class AntigravityProvider: UsageProvider {
         }
     }
 
+    /// Parses protobuf-JSON timestamps, which may or may not carry fractional seconds (e.g. "2026-10-24T03:42:18.491Z").
+    static func parseResetTime(_ string: String) -> Date? {
+        let fractional = ISO8601DateFormatter()
+        fractional.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        if let date = fractional.date(from: string) { return date }
+
+        let whole = ISO8601DateFormatter()
+        whole.formatOptions = [.withInternetDateTime]
+        return whole.date(from: string)
+    }
+
+    /// Display order for known groups; unknown groups follow alphabetically.
+    static let groupDisplayOrder = ["Gemini Models", "Gemini 4 Argon", "Claude and GPT models"]
+
     /// Merges groups from several language_server responses by group name, keeping the most-consumed
-    /// bucket per window. Group order follows first appearance, so output is stable for a given input order.
+    /// bucket per window. Output uses `groupDisplayOrder` then name, so it is independent of response order and subsets.
     static func mergeQuotaGroups(_ responses: [[QuotaGroup]]) -> [QuotaGroup] {
         var merged: [QuotaGroup] = []
         for groups in responses {
@@ -220,7 +233,11 @@ public final class AntigravityProvider: UsageProvider {
                 }
             }
         }
-        return merged
+        return merged.sorted { lhs, rhs in
+            let lhsRank = groupDisplayOrder.firstIndex(of: lhs.name) ?? groupDisplayOrder.count
+            let rhsRank = groupDisplayOrder.firstIndex(of: rhs.name) ?? groupDisplayOrder.count
+            return lhsRank != rhsRank ? lhsRank < rhsRank : lhs.name < rhs.name
+        }
     }
 
     /// Builds the provider usage: headline metrics are the most-consumed bucket per window across all groups.

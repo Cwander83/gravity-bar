@@ -121,6 +121,28 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         assert(merged.fiveHourMetric.usedPercent == 10.0)
         assert(merged.weeklyMetric.usedPercent == 26.0)
         assert(merged.groups.count == 3)
+        assert(mergedAB.map { $0.name } == AntigravityProvider.groupDisplayOrder)
+
+        // Different PIDs returning different subsets / orders must merge identically
+        let subsetA = [argonGroups[2], argonGroups[0]]          // Argon, Gemini Models
+        let subsetB = [otherGroups[1], argonGroups[1]]          // Claude and GPT (other PID), Claude and GPT (argon PID)
+        let unknown = [QuotaGroup(name: "Aardvark Models", weeklyMetric: UsageMetric(windowType: .weekly, usedPercent: 3, resetDate: now))]
+        let forward = AntigravityProvider.mergeQuotaGroups([subsetA, subsetB, unknown])
+        let backward = AntigravityProvider.mergeQuotaGroups([unknown, subsetB, subsetA])
+        assert(forward.map { $0.name } == backward.map { $0.name })
+        assert(forward.map { $0.name } == AntigravityProvider.groupDisplayOrder + ["Aardvark Models"])
+
+        // Protobuf JSON timestamps may include fractional seconds
+        let fractionalReset = AntigravityProvider.parseResetTime("2026-10-24T03:42:18.491Z")
+        let wholeReset = AntigravityProvider.parseResetTime("2026-10-24T03:42:18Z")
+        assert(fractionalReset != nil && wholeReset != nil)
+        assert(abs(fractionalReset!.timeIntervalSince(wholeReset!) - 0.491) < 0.001)
+        let fractionalResponse = Data("""
+        {"response":{"groups":[{"displayName":"Gemini Models","buckets":[
+          {"window":"5h","remainingFraction":0.5,"resetTime":"2026-10-24T03:42:18.491Z"}]}]}}
+        """.utf8)
+        let fractionalGroups = AntigravityProvider.parseQuotaGroups(from: fractionalResponse, now: now)
+        assert(fractionalGroups?.first?.fiveHourMetric?.resetDate == fractionalReset, "Fractional resetTime must not fall back to now + 5h")
         print("✓ Antigravity multi-group merge tests passed")
 
         // 4. Claude Real Data Provider Test

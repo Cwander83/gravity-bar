@@ -159,7 +159,8 @@ public final class UsageManager: ObservableObject {
     }
 
     public var nextResetCountdownText: String {
-        let allMetrics = activeUsages.flatMap { [$0.fiveHourMetric, $0.weeklyMetric] }
+        // Include per-group buckets: one may reset sooner than the most-consumed headline bucket
+        let allMetrics = activeUsages.flatMap { [$0.fiveHourMetric, $0.weeklyMetric] + $0.groups.flatMap(\.metrics) }
         guard let earliest = allMetrics.map({ $0.resetDate }).filter({ $0 > Date() }).min() else {
             return "Resets momentarily"
         }
