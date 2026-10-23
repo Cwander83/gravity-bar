@@ -35,6 +35,14 @@ public final class AntigravityProvider: UsageProvider {
             if let wk = json["weeklyPercent"] as? Double { weekly = wk }
             else if let wkInt = json["weeklyPercent"] as? Int { weekly = Double(wkInt) }
 
+            // Remaining-fraction keys (1.0 = untouched) mirror the live RPC polarity; used only when no percent key is present
+            if json["fiveHourPercent"] == nil, let fr = json["fiveHourRemainingFraction"] as? Double {
+                fiveHour = UsageMetric.usedPercent(fromRemainingFraction: fr)
+            }
+            if json["weeklyPercent"] == nil, let wr = json["weeklyRemainingFraction"] as? Double {
+                weekly = UsageMetric.usedPercent(fromRemainingFraction: wr)
+            }
+
             if let r5 = json["fiveHourResetInSeconds"] as? Double { resetFiveHour = now.addingTimeInterval(r5) }
             if let rw = json["weeklyResetInSeconds"] as? Double { resetWeekly = now.addingTimeInterval(rw) }
         }

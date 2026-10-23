@@ -104,7 +104,7 @@ public struct UsageMetricRowView: View {
                     Capsule()
                         .fill(statusColor)
                         .frame(
-                            width: max(4, geometry.size.width * CGFloat(metric.usedPercent / 100.0)),
+                            width: metric.usedPercent <= 0 ? 0 : max(4, geometry.size.width * CGFloat(metric.usedPercent / 100.0)),
                             height: GravityBarTokens.progressBarHeight
                         )
                         .shadow(color: statusColor.opacity(0.35), radius: 4, x: 0, y: 0)

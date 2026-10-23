@@ -74,6 +74,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         assert(exhausted.usedPercent == 100.0 && exhausted.threshold == .critical)
         let quarterUsed = UsageMetric(windowType: .weekly, remainingFraction: 0.75, resetDate: now)
         assert(quarterUsed.usedPercent == 25.0 && quarterUsed.usageSummary == "25% used • 75% left")
+        let roundingEdge = UsageMetric(windowType: .fiveHour, usedPercent: 12.5, resetDate: now)
+        assert(roundingEdge.usageSummary == "13% used • 87% left")
         print("✓ Quota polarity tests passed")
 
         // 4. Claude Real Data Provider Test

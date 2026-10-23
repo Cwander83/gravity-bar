@@ -71,8 +71,13 @@ public struct UsageMetric: Identifiable, Codable, Equatable {
 
     /// Builds a metric from a provider that reports the fraction of quota REMAINING (1.0 = untouched).
     public init(id: UUID = UUID(), windowType: WindowType, remainingFraction: Double, resetDate: Date) {
+        self.init(id: id, windowType: windowType, usedPercent: UsageMetric.usedPercent(fromRemainingFraction: remainingFraction), resetDate: resetDate)
+    }
+
+    /// Converts a REMAINING fraction (1.0 = untouched) into a rounded USED percentage (0–100).
+    public static func usedPercent(fromRemainingFraction remainingFraction: Double) -> Double {
         let remaining = max(0.0, min(1.0, remainingFraction))
-        self.init(id: id, windowType: windowType, usedPercent: round((1.0 - remaining) * 100.0), resetDate: resetDate)
+        return round((1.0 - remaining) * 100.0)
     }
 
     /// Percentage of the window still available (0–100).
@@ -80,9 +85,11 @@ public struct UsageMetric: Identifiable, Codable, Equatable {
         max(0.0, 100.0 - usedPercent)
     }
 
-    /// Readout showing both polarities, e.g. "7% used • 93% left".
+    /// Readout showing both polarities, e.g. "7% used • 93% left". Halves always sum to 100%.
     public var usageSummary: String {
-        "\(Int(round(usedPercent)))% used • \(Int(round(remainingPercent)))% left"
+        let used = Int(round(usedPercent))
+        let left = max(0, 100 - used)
+        return "\(used)% used • \(left)% left"
     }
 
     public var threshold: QuotaThreshold {
