@@ -78,7 +78,14 @@ public final class UsageManager: ObservableObject {
         let interval = defaults.double(forKey: "GravityBar_pollingInterval")
         self.pollingIntervalSeconds = interval > 0 ? interval : 60.0
 
-        self.claudePath = defaults.string(forKey: "GravityBar_claudePath") ?? "~/Library/Application Support/Claude/plan-usage-history.json"
+        let claudeDefaultPath = "~/Library/Application Support/Claude/plan-usage-history.json"
+        let legacyClaudePath = "~/.claude/state.json"
+        // Earlier builds defaulted to ~/.claude/state.json, which Claude never writes; migrate it to the real file
+        if let saved = defaults.string(forKey: "GravityBar_claudePath"), saved != legacyClaudePath {
+            self.claudePath = saved
+        } else {
+            self.claudePath = claudeDefaultPath
+        }
         self.codexPath = defaults.string(forKey: "GravityBar_codexPath") ?? "~/.codex/session.json"
         self.geminiPath = defaults.string(forKey: "GravityBar_geminiPath") ?? "~/.gemini/antigravity-ide/metrics.json"
 

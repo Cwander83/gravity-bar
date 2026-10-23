@@ -137,6 +137,65 @@ public struct QuotaGroup: Identifiable, Codable, Equatable {
     }
 }
 
+/// Token counts for a span of Claude Code CLI activity.
+public struct TokenUsage: Codable, Equatable {
+    public var inputTokens: Int
+    public var outputTokens: Int
+    public var cacheReadTokens: Int
+    public var cacheCreationTokens: Int
+
+    public init(inputTokens: Int = 0, outputTokens: Int = 0, cacheReadTokens: Int = 0, cacheCreationTokens: Int = 0) {
+        self.inputTokens = inputTokens
+        self.outputTokens = outputTokens
+        self.cacheReadTokens = cacheReadTokens
+        self.cacheCreationTokens = cacheCreationTokens
+    }
+
+    public var cacheTokens: Int { cacheReadTokens + cacheCreationTokens }
+    public var totalTokens: Int { inputTokens + outputTokens + cacheTokens }
+
+    public static func + (lhs: TokenUsage, rhs: TokenUsage) -> TokenUsage {
+        TokenUsage(
+            inputTokens: lhs.inputTokens + rhs.inputTokens,
+            outputTokens: lhs.outputTokens + rhs.outputTokens,
+            cacheReadTokens: lhs.cacheReadTokens + rhs.cacheReadTokens,
+            cacheCreationTokens: lhs.cacheCreationTokens + rhs.cacheCreationTokens
+        )
+    }
+
+    /// Readout like "1.2M in • 340K out • 8.1M cache".
+    public var summary: String {
+        "\(TokenUsage.compact(inputTokens)) in • \(TokenUsage.compact(outputTokens)) out • \(TokenUsage.compact(cacheTokens)) cache"
+    }
+
+    /// Compact count: 950, 12.3K, 342K, 4.5M, 1.2B (a trailing ".0" is dropped).
+    public static func compact(_ count: Int) -> String {
+        func scaled(_ value: Double, _ suffix: String) -> String {
+            let text = String(format: "%.1f", value)
+            return (text.hasSuffix(".0") ? String(text.dropLast(2)) : text) + suffix
+        }
+
+        let value = Double(count)
+        switch value {
+        case 1_000_000_000...: return scaled(value / 1_000_000_000, "B")
+        case 1_000_000...: return scaled(value / 1_000_000, "M")
+        case 1_000...: return scaled(value / 1_000, "K")
+        default: return "\(count)"
+        }
+    }
+}
+
+/// Claude Code CLI token usage over rolling spans ending now.
+public struct CLITokenUsage: Codable, Equatable {
+    public var last5h: TokenUsage
+    public var last7d: TokenUsage
+
+    public init(last5h: TokenUsage, last7d: TokenUsage) {
+        self.last5h = last5h
+        self.last7d = last7d
+    }
+}
+
 /// Aggregated usage state for a single provider.
 public struct ProviderUsage: Identifiable, Codable, Equatable {
     public var id: String { provider.rawValue }
@@ -146,17 +205,21 @@ public struct ProviderUsage: Identifiable, Codable, Equatable {
     public var weeklyMetric: UsageMetric
     /// Per-group breakdown; empty for providers that expose a single quota.
     public var groups: [QuotaGroup]
+    /// Claude Code CLI token usage; nil for other providers or when no recent transcripts exist.
+    public var cliTokenUsage: CLITokenUsage?
 
     public init(
         provider: ProviderType,
         fiveHourMetric: UsageMetric,
         weeklyMetric: UsageMetric,
-        groups: [QuotaGroup] = []
+        groups: [QuotaGroup] = [],
+        cliTokenUsage: CLITokenUsage? = nil
     ) {
         self.provider = provider
         self.fiveHourMetric = fiveHourMetric
         self.weeklyMetric = weeklyMetric
         self.groups = groups
+        self.cliTokenUsage = cliTokenUsage
     }
 
     public var highestPercent: Double {

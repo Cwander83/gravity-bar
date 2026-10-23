@@ -24,6 +24,10 @@ public final class MockProvider: UsageProvider {
                     windowType: .weekly,
                     usedPercent: 34.0,
                     resetDate: now.addingTimeInterval((3 * 86400) + (14 * 3600))
+                ),
+                cliTokenUsage: CLITokenUsage(
+                    last5h: TokenUsage(inputTokens: 18_400, outputTokens: 342_000, cacheReadTokens: 8_100_000, cacheCreationTokens: 410_000),
+                    last7d: TokenUsage(inputTokens: 96_000, outputTokens: 2_300_000, cacheReadTokens: 61_000_000, cacheCreationTokens: 3_900_000)
                 )
             )
 
