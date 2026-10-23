@@ -37,12 +37,12 @@ public final class CodexProvider: UsageProvider {
             provider: .codex,
             fiveHourMetric: UsageMetric(
                 windowType: .fiveHour,
-                percent: fiveHour,
+                usedPercent: fiveHour,
                 resetDate: resetFiveHour
             ),
             weeklyMetric: UsageMetric(
                 windowType: .weekly,
-                percent: weekly,
+                usedPercent: weekly,
                 resetDate: resetWeekly
             )
         )
