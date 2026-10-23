@@ -118,21 +118,45 @@ public struct UsageMetric: Identifiable, Codable, Equatable {
     }
 }
 
+/// A named quota bucket group inside a provider (e.g. Antigravity's "Gemini Models", "Gemini 4 Argon",
+/// "Claude and GPT models"). Either window may be absent; Argon, for example, only has a weekly bucket.
+public struct QuotaGroup: Identifiable, Codable, Equatable {
+    public var id: String { name }
+    public let name: String
+    public var fiveHourMetric: UsageMetric?
+    public var weeklyMetric: UsageMetric?
+
+    public init(name: String, fiveHourMetric: UsageMetric? = nil, weeklyMetric: UsageMetric? = nil) {
+        self.name = name
+        self.fiveHourMetric = fiveHourMetric
+        self.weeklyMetric = weeklyMetric
+    }
+
+    public var metrics: [UsageMetric] {
+        [fiveHourMetric, weeklyMetric].compactMap { $0 }
+    }
+}
+
 /// Aggregated usage state for a single provider.
 public struct ProviderUsage: Identifiable, Codable, Equatable {
     public var id: String { provider.rawValue }
     public let provider: ProviderType
+    /// Headline metrics. For multi-group providers these are the most-consumed bucket per window across all groups.
     public var fiveHourMetric: UsageMetric
     public var weeklyMetric: UsageMetric
+    /// Per-group breakdown; empty for providers that expose a single quota.
+    public var groups: [QuotaGroup]
 
     public init(
         provider: ProviderType,
         fiveHourMetric: UsageMetric,
-        weeklyMetric: UsageMetric
+        weeklyMetric: UsageMetric,
+        groups: [QuotaGroup] = []
     ) {
         self.provider = provider
         self.fiveHourMetric = fiveHourMetric
         self.weeklyMetric = weeklyMetric
+        self.groups = groups
     }
 
     public var highestPercent: Double {

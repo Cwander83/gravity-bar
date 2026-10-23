@@ -19,11 +19,18 @@ public struct UsageMetricRowView: View {
                 Spacer()
             }
 
-            // 5-Hour Window Meter
-            windowMeterView(metric: usage.fiveHourMetric)
+            if usage.groups.isEmpty {
+                // 5-Hour Window Meter
+                windowMeterView(metric: usage.fiveHourMetric)
 
-            // Weekly Window Meter
-            windowMeterView(metric: usage.weeklyMetric)
+                // Weekly Window Meter
+                windowMeterView(metric: usage.weeklyMetric)
+            } else {
+                // Per-group meters (e.g. Gemini Models, Gemini 4 Argon, Claude and GPT models)
+                ForEach(usage.groups) { group in
+                    groupSectionView(group: group)
+                }
+            }
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 12)
@@ -77,6 +84,18 @@ public struct UsageMetricRowView: View {
                 startPoint: .topLeading,
                 endPoint: .bottomTrailing
             ))
+        }
+    }
+
+    private func groupSectionView(group: QuotaGroup) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(group.name.uppercased())
+                .font(.system(size: 9, weight: .black))
+                .foregroundColor(.secondary)
+
+            ForEach(group.metrics) { metric in
+                windowMeterView(metric: metric)
+            }
         }
     }
 

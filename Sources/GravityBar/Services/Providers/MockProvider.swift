@@ -54,7 +54,23 @@ public final class MockProvider: UsageProvider {
                     windowType: .weekly,
                     usedPercent: 62.0,
                     resetDate: now.addingTimeInterval((2 * 86400) + (18 * 3600))
-                )
+                ),
+                groups: [
+                    QuotaGroup(
+                        name: "Gemini Models",
+                        fiveHourMetric: UsageMetric(windowType: .fiveHour, usedPercent: 89.0, resetDate: now.addingTimeInterval(24 * 60)),
+                        weeklyMetric: UsageMetric(windowType: .weekly, usedPercent: 41.0, resetDate: now.addingTimeInterval((2 * 86400) + (18 * 3600)))
+                    ),
+                    QuotaGroup(
+                        name: "Gemini 4 Argon",
+                        weeklyMetric: UsageMetric(windowType: .weekly, usedPercent: 62.0, resetDate: now.addingTimeInterval((3 * 86400) + (2 * 3600)))
+                    ),
+                    QuotaGroup(
+                        name: "Claude and GPT models",
+                        fiveHourMetric: UsageMetric(windowType: .fiveHour, usedPercent: 12.0, resetDate: now.addingTimeInterval(24 * 60)),
+                        weeklyMetric: UsageMetric(windowType: .weekly, usedPercent: 5.0, resetDate: now.addingTimeInterval((6 * 86400) + (4 * 3600)))
+                    )
+                ]
             )
         }
     }

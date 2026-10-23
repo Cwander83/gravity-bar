@@ -78,6 +78,73 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         assert(roundingEdge.usageSummary == "13% used • 87% left")
         print("✓ Quota polarity tests passed")
 
+        // 3c. Antigravity multi-group parsing & multi-PID merge (CHR-57)
+        let argonResponse = Data("""
+        {"response":{"groups":[
+          {"displayName":"Gemini Models","buckets":[
+            {"window":"5h","remainingFraction":1.0,"resetTime":"2026-10-24T03:42:18Z"},
+            {"window":"weekly","remainingFraction":0.9961552,"resetTime":"2026-10-27T16:45:03Z"}]},
+          {"displayName":"Claude and GPT models","buckets":[
+            {"window":"5h","remainingFraction":1.0,"resetTime":"2026-10-24T03:42:18Z"},
+            {"window":"weekly","remainingFraction":1.0,"resetTime":"2026-10-30T22:42:18Z"}]},
+          {"displayName":"Gemini 4 Argon","buckets":[
+            {"window":"weekly","remainingFraction":0.7350507,"resetTime":"2026-10-27T16:32:30Z"}]}
+        ]}}
+        """.utf8)
+        let otherResponse = Data("""
+        {"response":{"groups":[
+          {"displayName":"Gemini Models","buckets":[
+            {"window":"5h","remainingFraction":0.9,"resetTime":"2026-10-24T03:42:18Z"},
+            {"window":"weekly","remainingFraction":1.0,"resetTime":"2026-10-27T16:45:03Z"}]},
+          {"displayName":"Claude and GPT models","buckets":[
+            {"window":"5h","remainingFraction":1.0,"resetTime":"2026-10-24T03:42:18Z"}]}
+        ]}}
+        """.utf8)
+        guard let argonGroups = AntigravityProvider.parseQuotaGroups(from: argonResponse, now: now),
+              let otherGroups = AntigravityProvider.parseQuotaGroups(from: otherResponse, now: now) else {
+            preconditionFailure("Antigravity quota fixtures failed to parse")
+        }
+        assert(argonGroups.map { $0.name } == ["Gemini Models", "Claude and GPT models", "Gemini 4 Argon"])
+        assert(argonGroups[2].fiveHourMetric == nil && argonGroups[2].weeklyMetric?.usedPercent == 26.0)
+        assert(argonGroups[0].fiveHourMetric?.usedPercent == 0.0, "Argon weekly bucket must not overwrite Gemini Models")
+        assert(AntigravityProvider.parseQuotaGroups(from: Data("{}".utf8)) == nil)
+
+        let mergedAB = AntigravityProvider.mergeQuotaGroups([argonGroups, otherGroups])
+        let mergedBA = AntigravityProvider.mergeQuotaGroups([otherGroups, argonGroups])
+        assert(mergedAB.count == 3 && mergedBA.count == 3)
+        for (a, b) in zip(mergedAB, mergedBA) {
+            assert(a.name == b.name)
+            assert(a.fiveHourMetric?.usedPercent == b.fiveHourMetric?.usedPercent)
+            assert(a.weeklyMetric?.usedPercent == b.weeklyMetric?.usedPercent)
+        }
+        let merged = AntigravityProvider.makeUsage(groups: mergedAB, now: now)
+        assert(merged.fiveHourMetric.usedPercent == 10.0)
+        assert(merged.weeklyMetric.usedPercent == 26.0)
+        assert(merged.groups.count == 3)
+        assert(mergedAB.map { $0.name } == AntigravityProvider.groupDisplayOrder)
+
+        // Different PIDs returning different subsets / orders must merge identically
+        let subsetA = [argonGroups[2], argonGroups[0]]          // Argon, Gemini Models
+        let subsetB = [otherGroups[1], argonGroups[1]]          // Claude and GPT (other PID), Claude and GPT (argon PID)
+        let unknown = [QuotaGroup(name: "Aardvark Models", weeklyMetric: UsageMetric(windowType: .weekly, usedPercent: 3, resetDate: now))]
+        let forward = AntigravityProvider.mergeQuotaGroups([subsetA, subsetB, unknown])
+        let backward = AntigravityProvider.mergeQuotaGroups([unknown, subsetB, subsetA])
+        assert(forward.map { $0.name } == backward.map { $0.name })
+        assert(forward.map { $0.name } == AntigravityProvider.groupDisplayOrder + ["Aardvark Models"])
+
+        // Protobuf JSON timestamps may include fractional seconds
+        let fractionalReset = AntigravityProvider.parseResetTime("2026-10-24T03:42:18.491Z")
+        let wholeReset = AntigravityProvider.parseResetTime("2026-10-24T03:42:18Z")
+        assert(fractionalReset != nil && wholeReset != nil)
+        assert(abs(fractionalReset!.timeIntervalSince(wholeReset!) - 0.491) < 0.001)
+        let fractionalResponse = Data("""
+        {"response":{"groups":[{"displayName":"Gemini Models","buckets":[
+          {"window":"5h","remainingFraction":0.5,"resetTime":"2026-10-24T03:42:18.491Z"}]}]}}
+        """.utf8)
+        let fractionalGroups = AntigravityProvider.parseQuotaGroups(from: fractionalResponse, now: now)
+        assert(fractionalGroups?.first?.fiveHourMetric?.resetDate == fractionalReset, "Fractional resetTime must not fall back to now + 5h")
+        print("✓ Antigravity multi-group merge tests passed")
+
         // 4. Claude Real Data Provider Test
         let claudeProv = ClaudeProvider()
         if let u = try? await claudeProv.fetchUsage() {
@@ -90,6 +157,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if let u = try? await geminiProv.fetchUsage() {
             assert(u.provider == .gemini)
             print("✓ Antigravity real data provider parsed: 5h=\(Int(u.fiveHourMetric.usedPercent))% used, weekly=\(Int(u.weeklyMetric.usedPercent))% used")
+            for group in u.groups {
+                print("    • \(group.name): " + group.metrics.map { "\($0.windowType == .fiveHour ? "5h" : "weekly")=\($0.usageSummary)" }.joined(separator: ", "))
+            }
         }
 
         print("All GravityBar self-tests passed successfully!")
