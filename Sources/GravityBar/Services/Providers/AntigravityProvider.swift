@@ -43,12 +43,12 @@ public final class AntigravityProvider: UsageProvider {
             provider: .gemini,
             fiveHourMetric: UsageMetric(
                 windowType: .fiveHour,
-                percent: fiveHour,
+                usedPercent: fiveHour,
                 resetDate: resetFiveHour
             ),
             weeklyMetric: UsageMetric(
                 windowType: .weekly,
-                percent: weekly,
+                usedPercent: weekly,
                 resetDate: resetWeekly
             )
         )
@@ -146,8 +146,8 @@ public final class AntigravityProvider: UsageProvider {
                        let respObj = json["response"] as? [String: Any],
                        let groups = respObj["groups"] as? [[String: Any]] {
 
-                        var fiveHourPercent = 0.0
-                        var weeklyPercent = 0.0
+                        var fiveHourRemaining = 1.0
+                        var weeklyRemaining = 1.0
                         var resetFiveHour = now.addingTimeInterval(5 * 3600)
                         var resetWeekly = now.addingTimeInterval(7 * 86400)
 
@@ -158,21 +158,20 @@ public final class AntigravityProvider: UsageProvider {
                             if let buckets = group["buckets"] as? [[String: Any]] {
                                 for bucket in buckets {
                                     let window = (bucket["window"] as? String) ?? ""
-                                    let remaining = (bucket["remainingFraction"] as? Double) ?? 1.0
-                                    let pct = round(remaining * 100.0) // Matches Antigravity IDE UI quota numbers
+                                    let remaining = (bucket["remainingFraction"] as? Double) ?? 1.0 // Fraction LEFT, not used (1.0 = untouched)
 
                                     if let resetStr = bucket["resetTime"] as? String,
                                        let parsedDate = isoFormatter.date(from: resetStr) {
                                         if window == "5h" {
-                                            fiveHourPercent = pct
+                                            fiveHourRemaining = remaining
                                             resetFiveHour = parsedDate
                                         } else if window == "weekly" {
-                                            weeklyPercent = pct
+                                            weeklyRemaining = remaining
                                             resetWeekly = parsedDate
                                         }
                                     } else {
-                                        if window == "5h" { fiveHourPercent = pct }
-                                        else if window == "weekly" { weeklyPercent = pct }
+                                        if window == "5h" { fiveHourRemaining = remaining }
+                                        else if window == "weekly" { weeklyRemaining = remaining }
                                     }
                                 }
                             }
@@ -182,12 +181,12 @@ public final class AntigravityProvider: UsageProvider {
                             provider: .gemini,
                             fiveHourMetric: UsageMetric(
                                 windowType: .fiveHour,
-                                percent: fiveHourPercent,
+                                remainingFraction: fiveHourRemaining,
                                 resetDate: resetFiveHour
                             ),
                             weeklyMetric: UsageMetric(
                                 windowType: .weekly,
-                                percent: weeklyPercent,
+                                remainingFraction: weeklyRemaining,
                                 resetDate: resetWeekly
                             )
                         )

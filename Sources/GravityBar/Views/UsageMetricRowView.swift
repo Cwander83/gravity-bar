@@ -89,7 +89,7 @@ public struct UsageMetricRowView: View {
                     .font(.system(size: 11, weight: .medium))
                     .foregroundColor(.secondary)
                 Spacer()
-                Text("\(Int(round(metric.percent)))%")
+                Text(metric.usageSummary)
                     .font(.system(size: 11, weight: .bold, design: .monospaced))
                     .foregroundColor(statusColor)
             }
@@ -104,7 +104,7 @@ public struct UsageMetricRowView: View {
                     Capsule()
                         .fill(statusColor)
                         .frame(
-                            width: max(4, geometry.size.width * CGFloat(metric.percent / 100.0)),
+                            width: max(4, geometry.size.width * CGFloat(metric.usedPercent / 100.0)),
                             height: GravityBarTokens.progressBarHeight
                         )
                         .shadow(color: statusColor.opacity(0.35), radius: 4, x: 0, y: 0)

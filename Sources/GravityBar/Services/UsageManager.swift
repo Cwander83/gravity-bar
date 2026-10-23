@@ -120,8 +120,8 @@ public final class UsageManager: ObservableObject {
             } catch {
                 let fallback = ProviderUsage(
                     provider: providerType,
-                    fiveHourMetric: UsageMetric(windowType: .fiveHour, percent: 0.0, resetDate: Date().addingTimeInterval(5 * 3600)),
-                    weeklyMetric: UsageMetric(windowType: .weekly, percent: 0.0, resetDate: Date().addingTimeInterval(7 * 86400))
+                    fiveHourMetric: UsageMetric(windowType: .fiveHour, usedPercent: 0.0, resetDate: Date().addingTimeInterval(5 * 3600)),
+                    weeklyMetric: UsageMetric(windowType: .weekly, usedPercent: 0.0, resetDate: Date().addingTimeInterval(7 * 86400))
                 )
                 providerUsages[providerType] = fallback
             }
@@ -143,18 +143,18 @@ public final class UsageManager: ObservableObject {
     }
 
     public var highestUrgency: QuotaThreshold {
-        QuotaThreshold.from(percent: maxUrgencyPercent)
+        QuotaThreshold.from(usedPercent: maxUrgencyPercent)
     }
 
     public var overallStatusText: String {
         let pct = Int(round(maxUrgencyPercent))
         switch highestUrgency {
         case .critical:
-            return "Critical Quota (\(pct)%)"
+            return "Critical Quota (\(pct)% used)"
         case .warning:
-            return "Elevated Usage (\(pct)%)"
+            return "Elevated Usage (\(pct)% used)"
         case .normal:
-            return "Normal / Healthy (\(pct)%)"
+            return "Normal / Healthy (\(pct)% used)"
         }
     }
 
@@ -163,7 +163,7 @@ public final class UsageManager: ObservableObject {
         guard let earliest = allMetrics.map({ $0.resetDate }).filter({ $0 > Date() }).min() else {
             return "Resets momentarily"
         }
-        let metric = UsageMetric(windowType: .fiveHour, percent: 0, resetDate: earliest)
+        let metric = UsageMetric(windowType: .fiveHour, usedPercent: 0, resetDate: earliest)
         return metric.formattedReset()
     }
 

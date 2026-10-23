@@ -26,14 +26,14 @@ public final class ClaudeProvider: UsageProvider {
            let samples = json["samples"] as? [[String: Any]],
            let lastSample = samples.last {
             if let u = lastSample["u"] as? [String: Any] {
-                // "fh" = 5-hour rolling percent
+                // "fh" = 5-hour rolling percent USED
                 if let fh = u["fh"] as? Double {
                     fiveHour = fh
                 } else if let fhInt = u["fh"] as? Int {
                     fiveHour = Double(fhInt)
                 }
 
-                // "sd" = seven-day rolling percent
+                // "sd" = seven-day rolling percent USED
                 if let sd = u["sd"] as? Double {
                     weekly = sd
                 } else if let sdInt = u["sd"] as? Int {
@@ -52,12 +52,12 @@ public final class ClaudeProvider: UsageProvider {
             provider: .claude,
             fiveHourMetric: UsageMetric(
                 windowType: .fiveHour,
-                percent: fiveHour,
+                usedPercent: fiveHour,
                 resetDate: resetFiveHour
             ),
             weeklyMetric: UsageMetric(
                 windowType: .weekly,
-                percent: weekly,
+                usedPercent: weekly,
                 resetDate: resetWeekly
             )
         )
