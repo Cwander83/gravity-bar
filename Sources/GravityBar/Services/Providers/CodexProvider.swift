@@ -31,12 +31,14 @@ public final class CodexProvider: UsageProvider {
     /// Only windows Codex actually reports are set (e.g. Plus currently reports a weekly window only).
     static func makeUsage(events: [CodexRolloutScanner.Event], chatGPTApp: ActiveModel? = nil, now: Date = Date()) -> ProviderUsage {
         let models = [chatGPTApp].compactMap { $0 }
+        // A running ChatGPT desktop app means the account is in use now, whatever the CLI logs say
+        let chatGPTRunning = chatGPTApp?.isRunning == true
         guard let lastSeen = events.map(\.date).max() else {
             return ProviderUsage(
                 provider: .codex,
                 fiveHourMetric: nil,
                 weeklyMetric: nil,
-                connectionState: .notConfigured,
+                connectionState: chatGPTRunning ? .connected : .notConfigured,
                 models: models
             )
         }
@@ -60,7 +62,7 @@ public final class CodexProvider: UsageProvider {
             fiveHourMetric: fiveHour,
             weeklyMetric: longest,
             cliTokenUsage: tokens.last7d.totalTokens > 0 ? tokens : nil,
-            connectionState: .fromLastSeen(lastSeen, now: now),
+            connectionState: chatGPTRunning ? .connected : .fromLastSeen(lastSeen, now: now),
             planBadge: latest?.planType?.capitalized,
             models: models
         )

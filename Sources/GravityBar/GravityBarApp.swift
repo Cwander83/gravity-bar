@@ -257,6 +257,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         assert(ollama.models.map(\.name) == ["llama3.3:70b", "glm-5.3-flash:cloud"] && ollama.models[0].isRunning)
         assert(OllamaProvider.configuredModel(fromTOML: "model = \"glm-5.3-flash:cloud\"\nmodel_provider = \"ollama-launch\"\n[x]\nmodel = \"nope\"") == "glm-5.3-flash:cloud")
         assert(OllamaProvider.configuredModel(fromTOML: "[model_providers.x]\nmodel = \"nope\"") == nil)
+        // Nothing loaded and no Codex default: fall back to installed models, sized only for local weights
+        let installedTags = Data("{\"models\":[{\"name\":\"qwen2.5-coder:latest\",\"size\":4683087561},{\"name\":\"kimi-k2.6:cloud\",\"size\":310},{\"name\":\"a\"},{\"name\":\"b\"},{\"name\":\"c\"}]}".utf8)
+        let idleOllama = OllamaProvider.makeUsage(tagsData: installedTags, psData: nil, configuredModel: nil)
+        assert(idleOllama.models.count == OllamaProvider.installedModelPreviewLimit && idleOllama.models.allSatisfy { !$0.isRunning })
+        assert(idleOllama.models[0].detail?.hasPrefix("installed · ") == true && idleOllama.models[1].detail == "installed")
+        assert(idleOllama.planBadge == "5 models")
+
+        // A running ChatGPT desktop app counts as connected, with or without (stale) Codex CLI logs
+        let chatGPTRunning = ActiveModel(name: "ChatGPT desktop", detail: "running", isRunning: true)
+        assert(CodexProvider.makeUsage(events: [], chatGPTApp: chatGPTRunning, now: now).connectionState == .connected)
+        assert(CodexProvider.makeUsage(events: codexEvents, chatGPTApp: chatGPTRunning, now: now.addingTimeInterval(14 * 86400)).connectionState == .connected)
+        let chatGPTInstalled = ActiveModel(name: "ChatGPT desktop", detail: "installed")
+        assert(CodexProvider.makeUsage(events: [], chatGPTApp: chatGPTInstalled, now: now).connectionState == .notConfigured)
         print("✓ Connection state and Ollama tests passed")
 
         func pct(_ metric: UsageMetric?) -> String { metric.map { "\(Int($0.usedPercent))% used" } ?? "n/a" }

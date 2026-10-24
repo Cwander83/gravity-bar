@@ -23,15 +23,24 @@ public final class OllamaProvider: UsageProvider {
         sessionConfig.timeoutIntervalForRequest = 1.5
         let session = URLSession(configuration: sessionConfig)
 
-        guard let tagsData = try? await session.data(from: baseURL.appendingPathComponent("api/tags")).0 else {
+        // data(from:) doesn't throw on 4xx/5xx, so require a 200 before treating Ollama as connected
+        guard let (tagsData, tagsResponse) = try? await session.data(from: baseURL.appendingPathComponent("api/tags")),
+              (tagsResponse as? HTTPURLResponse)?.statusCode == 200 else {
             // Not reachable: installed-but-stopped is an error worth showing; otherwise it's simply absent
             let installed = FileManager.default.fileExists(atPath: "/Applications/Ollama.app") || configuredModel != nil
             return .unavailable(.ollama, state: installed ? .error("Ollama is not running") : .notConfigured)
         }
-        let psData = try? await session.data(from: baseURL.appendingPathComponent("api/ps")).0
+        var psData: Data?
+        if let (data, response) = try? await session.data(from: baseURL.appendingPathComponent("api/ps")),
+           (response as? HTTPURLResponse)?.statusCode == 200 {
+            psData = data
+        }
 
         return OllamaProvider.makeUsage(tagsData: tagsData, psData: psData, configuredModel: configuredModel)
     }
+
+    /// How many installed models to list when none are loaded.
+    static let installedModelPreviewLimit = 4
 
     static func makeUsage(tagsData: Data, psData: Data?, configuredModel: String?) -> ProviderUsage {
         func models(_ data: Data?) -> [[String: Any]] {
@@ -40,7 +49,8 @@ public final class OllamaProvider: UsageProvider {
             return json["models"] as? [[String: Any]] ?? []
         }
 
-        let installedCount = models(tagsData).count
+        let installed = models(tagsData)
+        let installedCount = installed.count
         var active = models(psData).compactMap { model -> ActiveModel? in
             guard let name = model["name"] as? String else { return nil }
             let vram = (model["size_vram"] as? NSNumber)?.int64Value ?? 0
@@ -52,6 +62,19 @@ public final class OllamaProvider: UsageProvider {
 
         if let configuredModel, !active.contains(where: { $0.name == configuredModel }) {
             active.append(ActiveModel(name: configuredModel, detail: "Codex default model"))
+        }
+
+        // Nothing loaded and no Codex default: list a few installed models so the card isn't empty
+        if active.isEmpty {
+            active = installed.prefix(installedModelPreviewLimit).compactMap { model -> ActiveModel? in
+                guard let name = model["name"] as? String else { return nil }
+                let size = (model["size"] as? NSNumber)?.int64Value ?? 0
+                // Cloud models report a tiny placeholder size, so only show sizes for real local weights
+                let detail = size >= 1_000_000
+                    ? "installed · \(ByteCountFormatter.string(fromByteCount: size, countStyle: .file))"
+                    : "installed"
+                return ActiveModel(name: name, detail: detail)
+            }
         }
 
         return ProviderUsage(
