@@ -274,6 +274,27 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         func pct(_ metric: UsageMetric?) -> String { metric.map { "\(Int($0.usedPercent))% used" } ?? "n/a" }
 
+        // 3h. language_server discovery parsing and off-main command runner (CHR-61)
+        let psSample = """
+          424 /Applications/Antigravity IDE.app/Contents/Resources/app/extensions/antigravity/bin/language_server_macos_arm --csrf_token tok-a --extension_server_port 58983 --extension_server_csrf_token ext-a
+         4488 /Applications/Antigravity.app/Contents/Resources/bin/language_server --standalone --csrf_token tok-b
+         4505 /Applications/Antigravity.app/Contents/Resources/bin/language_server multicall schedule
+          999 /usr/bin/some_other_server --csrf_token nope
+        """
+        assert(AntigravityProvider.parseLanguageServers(psOutput: psSample) == [424: "tok-a", 4488: "tok-b"])
+        let lsofSample = """
+        COMMAND    PID        USER   FD   TYPE             DEVICE SIZE/OFF NODE NAME
+        language_ 4488 chriswander    7u  IPv4 0xa6c05fe5aabd90cf      0t0  TCP 127.0.0.1:64082 (LISTEN)
+        language_ 4488 chriswander    8u  IPv4 0x68196f40e3fe2ee1      0t0  TCP 127.0.0.1:64083 (LISTEN)
+        language_ 8972 chriswander   24u  IPv6 0x1c3a5d15367ed637      0t0  TCP [::1]:64782 (LISTEN)
+        """
+        assert(AntigravityProvider.parseListeningPorts(lsofOutput: lsofSample) == [4488: [64082, 64083], 8972: [64782]])
+        let echoed = await AntigravityProvider.runCommand("/bin/echo", ["gravity"])
+        assert(echoed == "gravity\n")
+        let missingBinary = await AntigravityProvider.runCommand("/nonexistent/binary", [])
+        assert(missingBinary == "")
+        print("✓ language_server discovery parsing tests passed")
+
         // 4. Claude Real Data Provider Test
         let claudeProv = ClaudeProvider()
         if let u = try? await claudeProv.fetchUsage() {
@@ -303,9 +324,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         // 5. Antigravity Real Data Provider Test
         let geminiProv = AntigravityProvider()
+        let coldStart = Date()
+        _ = try? await geminiProv.fetchUsage()
+        let coldMs = Int(Date().timeIntervalSince(coldStart) * 1000)
+        let warmStart = Date()
         if let u = try? await geminiProv.fetchUsage() {
             assert(u.provider == .gemini)
+            let warmMs = Int(Date().timeIntervalSince(warmStart) * 1000)
             print("✓ Antigravity real data provider parsed: 5h=\(pct(u.fiveHourMetric)), long window=\(pct(u.weeklyMetric)), state=\(u.connectionState.label() ?? "connected")")
+            print("    • first fetch (discovery) \(coldMs)ms, second fetch \(warmMs)ms (cached endpoints)")
             for group in u.groups {
                 print("    • \(group.name): " + group.metrics.map { "\($0.windowType.rawValue)=\($0.usageSummary)" }.joined(separator: ", "))
             }
