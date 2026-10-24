@@ -13,7 +13,7 @@ public final class CodexProvider: UsageProvider {
     }
 
     public func fetchUsage() async throws -> ProviderUsage {
-        let path = customStatePath ?? "~/.codex/sessions"
+        let path = ProviderPaths.resolve(customStatePath, default: ProviderPaths.codexDefault)
         let now = Date()
         let events = CodexRolloutScanner.scan(path: path)
         return CodexProvider.makeUsage(events: events, chatGPTApp: CodexProvider.detectChatGPTApp(), now: now)

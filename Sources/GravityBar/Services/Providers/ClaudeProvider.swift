@@ -13,8 +13,7 @@ public final class ClaudeProvider: UsageProvider {
     }
 
     public func fetchUsage() async throws -> ProviderUsage {
-        let defaultPath = "~/Library/Application Support/Claude/plan-usage-history.json"
-        let path = customStatePath ?? defaultPath
+        let path = ProviderPaths.resolve(customStatePath, default: ProviderPaths.claudeDefault)
         let expandedPath = (path as NSString).expandingTildeInPath
         let now = Date()
 

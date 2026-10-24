@@ -90,7 +90,7 @@ public final class UsageManager: ObservableObject {
         let interval = defaults.double(forKey: "GravityBar_pollingInterval")
         self.pollingIntervalSeconds = interval > 0 ? interval : 60.0
 
-        let claudeDefaultPath = "~/Library/Application Support/Claude/plan-usage-history.json"
+        let claudeDefaultPath = ProviderPaths.claudeDefault
         let legacyClaudePath = "~/.claude/state.json"
         // Earlier builds defaulted to ~/.claude/state.json, which Claude never writes; migrate it to the real file
         if let saved = defaults.string(forKey: "GravityBar_claudePath"), saved != legacyClaudePath {
@@ -98,14 +98,14 @@ public final class UsageManager: ObservableObject {
         } else {
             self.claudePath = claudeDefaultPath
         }
-        let codexDefaultPath = "~/.codex/sessions"
+        let codexDefaultPath = ProviderPaths.codexDefault
         // Earlier builds defaulted to ~/.codex/session.json, which Codex never writes; migrate it to the rollout logs
         if let saved = defaults.string(forKey: "GravityBar_codexPath"), saved != "~/.codex/session.json" {
             self.codexPath = saved
         } else {
             self.codexPath = codexDefaultPath
         }
-        self.geminiPath = defaults.string(forKey: "GravityBar_geminiPath") ?? "~/.gemini/antigravity-ide/metrics.json"
+        self.geminiPath = defaults.string(forKey: "GravityBar_geminiPath") ?? ProviderPaths.geminiDefault
 
 
         setupProviders()
@@ -183,6 +183,12 @@ public final class UsageManager: ObservableObject {
     /// Usages whose numbers feed the status bar, banner and countdown (never offline placeholders).
     private var detectedUsages: [ProviderUsage] {
         activeUsages.filter { $0.connectionState.isDetected }
+    }
+
+    /// True once a refresh has finished and at least one shown provider has real data, so 0% is a reading
+    /// rather than "not loaded yet".
+    public var hasReadings: Bool {
+        lastUpdated != nil && !detectedUsages.isEmpty
     }
 
     public var maxUrgencyPercent: Double {
