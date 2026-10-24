@@ -323,13 +323,23 @@ public final class AntigravityProvider: UsageProvider {
 }
 
 /// Helper delegate accepting self-signed TLS certificates for localhost language server connections.
+/// Only loopback hosts are trusted this way; any other host gets the system's normal certificate checks.
 final class LocalhostTrustDelegate: NSObject, URLSessionDelegate {
+    static let loopbackHosts: Set<String> = ["127.0.0.1", "localhost", "::1"]
+
+    /// True only for a server-trust challenge from a loopback host.
+    static func shouldTrust(host: String, authenticationMethod: String) -> Bool {
+        authenticationMethod == NSURLAuthenticationMethodServerTrust && loopbackHosts.contains(host.lowercased())
+    }
+
     func urlSession(
         _ session: URLSession,
         didReceive challenge: URLAuthenticationChallenge,
         completionHandler: @escaping (URLSession.AuthChallengeDisposition, URLCredential?) -> Void
     ) {
-        if let trust = challenge.protectionSpace.serverTrust {
+        let space = challenge.protectionSpace
+        if LocalhostTrustDelegate.shouldTrust(host: space.host, authenticationMethod: space.authenticationMethod),
+           let trust = space.serverTrust {
             completionHandler(.useCredential, URLCredential(trust: trust))
         } else {
             completionHandler(.performDefaultHandling, nil)
