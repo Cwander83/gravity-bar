@@ -60,6 +60,12 @@ cat <<EOF > "${CONTENTS_DIR}/Info.plist"
 </plist>
 EOF
 
+# Ad-hoc sign so Gatekeeper on Apple Silicon doesn't flag the copied bundle as damaged.
+# "-" means no identity: this is not notarization, just a valid local signature.
+echo "==> Ad-hoc signing ${APP_NAME}.app..."
+codesign --force --deep --sign - "${APP_DIR}"
+codesign --verify --strict --verbose=2 "${APP_DIR}"
+
 echo "✓ Successfully bundled ${APP_NAME}.app at ${APP_DIR}"
 
 if [[ "${1:-}" == "--install" ]]; then
