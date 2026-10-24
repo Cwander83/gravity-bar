@@ -93,7 +93,7 @@ public struct UsageMetricRowView: View {
 
     private func cliTokenUsageView(_ cli: CLITokenUsage) -> some View {
         VStack(alignment: .leading, spacing: 4) {
-            Text("CLAUDE CODE CLI")
+            Text(usage.provider == .codex ? "CODEX CLI" : "CLAUDE CODE CLI")
                 .font(.system(size: 9, weight: .black))
                 .foregroundColor(.secondary)
 
