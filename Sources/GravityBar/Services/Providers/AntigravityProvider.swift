@@ -70,107 +70,159 @@ public final class AntigravityProvider: UsageProvider {
 
     // MARK: - Local LanguageServerService RPC Discovery
 
+    /// A discovered language_server RPC endpoint.
+    struct Endpoint: Equatable {
+        let pid: Int32
+        let port: Int
+        let csrfToken: String
+    }
+
+    /// Endpoints from the last discovery. Providers are rebuilt on every refresh, so the cache is static.
+    private static let endpointLock = NSLock()
+    private static var cachedEndpoints: [Endpoint] = []
+    private static var endpointsDiscoveredAt: Date?
+    /// Rediscover periodically so language_server instances started later (new IDE windows) are picked up.
+    static let endpointCacheLifetime: TimeInterval = 5 * 60
+
     private func fetchFromLocalLanguageServer() async -> ProviderUsage? {
-        // Step A: Run lsof to get listening ports of language_server
-        let lsofTask = Process()
-        lsofTask.executableURL = URL(fileURLWithPath: "/usr/sbin/lsof")
-        lsofTask.arguments = ["-iTCP", "-sTCP:LISTEN", "-P", "-n"]
-        let lsofPipe = Pipe()
-        lsofTask.standardOutput = lsofPipe
-
-        var pidPorts: [String: [Int]] = [:]
-        if (try? lsofTask.run()) != nil {
-            let lsofData = lsofPipe.fileHandleForReading.readDataToEndOfFile()
-            lsofTask.waitUntilExit()
-            let lsofOutput = String(data: lsofData, encoding: .utf8) ?? ""
-            for line in lsofOutput.components(separatedBy: "\n") {
-                if line.contains("language_") {
-                    let parts = line.split(separator: " ").map { String($0) }
-                    if parts.count >= 9 {
-                        let pid = parts[1]
-                        let addr = parts[8]
-                        if let colonIdx = addr.range(of: ":", options: .backwards) {
-                            let portStr = String(addr[colonIdx.upperBound...])
-                            if let port = Int(portStr) {
-                                pidPorts[pid, default: []].append(port)
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
-        guard !pidPorts.isEmpty else { return nil }
-
-        // Step B: Run ps to get csrf tokens for these PIDs
-        let psTask = Process()
-        psTask.executableURL = URL(fileURLWithPath: "/bin/ps")
-        psTask.arguments = ["-ef"]
-        let psPipe = Pipe()
-        psTask.standardOutput = psPipe
-
-        var pidTokens: [String: String] = [:]
-        if (try? psTask.run()) != nil {
-            let psData = psPipe.fileHandleForReading.readDataToEndOfFile()
-            psTask.waitUntilExit()
-            let psOutput = String(data: psData, encoding: .utf8) ?? ""
-            for line in psOutput.components(separatedBy: "\n") {
-                for pid in pidPorts.keys {
-                    if line.contains(" \(pid) ") && line.contains("--csrf_token") {
-                        if let range = line.range(of: "--csrf_token ") {
-                            let sub = line[range.upperBound...]
-                            if let token = sub.components(separatedBy: " ").first {
-                                pidTokens[pid] = token
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
-        // Step C: Query RetrieveUserQuotaSummary on every language_server instance.
-        // Several IDE windows can each run a language_server, and only some report every group
-        // (e.g. "Gemini 4 Argon"), so walk PIDs/ports in sorted order and merge all responses.
         let sessionConfig = URLSessionConfiguration.ephemeral
         sessionConfig.timeoutIntervalForRequest = 1.5
-        let delegate = LocalhostTrustDelegate()
-        let session = URLSession(configuration: sessionConfig, delegate: delegate, delegateQueue: nil)
-
+        let session = URLSession(configuration: sessionConfig, delegate: LocalhostTrustDelegate(), delegateQueue: nil)
         let now = Date()
-        var responses: [[QuotaGroup]] = []
 
-        let sortedPids = pidPorts.keys.sorted { (Int($0) ?? 0) < (Int($1) ?? 0) }
-        for pid in sortedPids {
-            guard let token = pidTokens[pid], let ports = pidPorts[pid] else { continue }
-            for port in ports.sorted() {
-                guard let url = URL(string: "https://127.0.0.1:\(port)/exa.language_server_pb.LanguageServerService/RetrieveUserQuotaSummary") else {
-                    continue
+        // Fast path: query cached endpoints directly (no subprocesses). Any failure falls back to discovery.
+        let (cached, discoveredAt) = AntigravityProvider.endpointLock.withLock {
+            (AntigravityProvider.cachedEndpoints, AntigravityProvider.endpointsDiscoveredAt)
+        }
+        if !cached.isEmpty, let discoveredAt, now.timeIntervalSince(discoveredAt) < AntigravityProvider.endpointCacheLifetime {
+            var responses: [[QuotaGroup]] = []
+            for endpoint in cached {
+                guard let groups = await AntigravityProvider.queryQuotaSummary(endpoint, session: session, now: now) else {
+                    responses = []
+                    break
                 }
+                responses.append(groups)
+            }
+            if !responses.isEmpty {
+                return AntigravityProvider.makeUsage(groups: AntigravityProvider.mergeQuotaGroups(responses), now: now)
+            }
+        }
 
-                var request = URLRequest(url: url)
-                request.httpMethod = "POST"
-                request.addValue("application/json", forHTTPHeaderField: "Content-Type")
-                request.addValue(token, forHTTPHeaderField: "X-Codeium-Csrf-Token")
-                request.httpBody = Data("{}".utf8)
+        // Discovery: one light `ps` pass for language_server PIDs + CSRF tokens, then `lsof` limited to those PIDs.
+        // Several IDE windows can each run a language_server, and only some report every group
+        // (e.g. "Gemini 4 Argon"), so walk PIDs/ports in sorted order and merge all responses.
+        let servers = AntigravityProvider.parseLanguageServers(
+            psOutput: await AntigravityProvider.runCommand("/bin/ps", ["-ax", "-o", "pid=,command="])
+        )
+        guard !servers.isEmpty else {
+            AntigravityProvider.storeEndpoints([], at: now)
+            return nil
+        }
 
-                do {
-                    let (data, response) = try await session.data(for: request)
-                    guard let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 200 else {
-                        continue
-                    }
+        let pidList = servers.keys.sorted().map(String.init).joined(separator: ",")
+        let ports = AntigravityProvider.parseListeningPorts(
+            lsofOutput: await AntigravityProvider.runCommand("/usr/sbin/lsof", ["-Pan", "-p", pidList, "-iTCP", "-sTCP:LISTEN"])
+        )
 
-                    if let groups = AntigravityProvider.parseQuotaGroups(from: data, now: now) {
-                        responses.append(groups)
-                        break // One answering port per PID is enough
-                    }
-                } catch {
-                    continue
+        var endpoints: [Endpoint] = []
+        var responses: [[QuotaGroup]] = []
+        for pid in servers.keys.sorted() {
+            guard let token = servers[pid] else { continue }
+            for port in (ports[pid] ?? []).sorted() {
+                let endpoint = Endpoint(pid: pid, port: port, csrfToken: token)
+                if let groups = await AntigravityProvider.queryQuotaSummary(endpoint, session: session, now: now) {
+                    endpoints.append(endpoint)
+                    responses.append(groups)
+                    break // One answering port per PID is enough
                 }
             }
         }
 
+        AntigravityProvider.storeEndpoints(endpoints, at: now)
         guard !responses.isEmpty else { return nil }
         return AntigravityProvider.makeUsage(groups: AntigravityProvider.mergeQuotaGroups(responses), now: now)
+    }
+
+    private static func storeEndpoints(_ endpoints: [Endpoint], at date: Date) {
+        endpointLock.withLock {
+            cachedEndpoints = endpoints
+            endpointsDiscoveredAt = endpoints.isEmpty ? nil : date
+        }
+    }
+
+    /// POSTs RetrieveUserQuotaSummary; nil on any transport error, non-200 status or unparseable body.
+    static func queryQuotaSummary(_ endpoint: Endpoint, session: URLSession, now: Date) async -> [QuotaGroup]? {
+        guard let url = URL(string: "https://127.0.0.1:\(endpoint.port)/exa.language_server_pb.LanguageServerService/RetrieveUserQuotaSummary") else {
+            return nil
+        }
+
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.addValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.addValue(endpoint.csrfToken, forHTTPHeaderField: "X-Codeium-Csrf-Token")
+        request.httpBody = Data("{}".utf8)
+
+        guard let (data, response) = try? await session.data(for: request),
+              (response as? HTTPURLResponse)?.statusCode == 200 else {
+            return nil
+        }
+        return parseQuotaGroups(from: data, now: now)
+    }
+
+    /// Maps language_server PIDs to their `--csrf_token` from `ps -ax -o pid=,command=` output.
+    /// Matches the exact `--csrf_token` argument, not `--extension_server_csrf_token`.
+    static func parseLanguageServers(psOutput: String) -> [Int32: String] {
+        var servers: [Int32: String] = [:]
+        for line in psOutput.split(separator: "\n") where line.contains("language_server") {
+            let parts = line.split(separator: " ", omittingEmptySubsequences: true).map(String.init)
+            guard let pid = parts.first.flatMap({ Int32($0) }),
+                  let flagIndex = parts.firstIndex(of: "--csrf_token"),
+                  flagIndex + 1 < parts.count else {
+                continue
+            }
+            servers[pid] = parts[flagIndex + 1]
+        }
+        return servers
+    }
+
+    /// Maps PIDs to listening TCP ports from `lsof -Pan -p <pids> -iTCP -sTCP:LISTEN` output.
+    static func parseListeningPorts(lsofOutput: String) -> [Int32: [Int]] {
+        var ports: [Int32: [Int]] = [:]
+        for line in lsofOutput.split(separator: "\n") where line.contains("(LISTEN)") {
+            let parts = line.split(separator: " ", omittingEmptySubsequences: true).map(String.init)
+            guard parts.count >= 9,
+                  let pid = Int32(parts[1]),
+                  let address = parts.dropLast().last, // NAME column, before "(LISTEN)"
+                  let colon = address.range(of: ":", options: .backwards),
+                  let port = Int(address[colon.upperBound...]) else {
+                continue
+            }
+            ports[pid, default: []].append(port)
+        }
+        return ports
+    }
+
+    /// Runs a short-lived command on a GCD worker so its blocking pipe read and `waitUntilExit`
+    /// never tie up the main thread or a Swift concurrency thread. Returns stdout, or "" on failure.
+    static func runCommand(_ path: String, _ arguments: [String]) async -> String {
+        await withCheckedContinuation { continuation in
+            DispatchQueue.global(qos: .utility).async {
+                let process = Process()
+                process.executableURL = URL(fileURLWithPath: path)
+                process.arguments = arguments
+                let pipe = Pipe()
+                process.standardOutput = pipe
+                process.standardError = FileHandle.nullDevice
+
+                guard (try? process.run()) != nil else {
+                    continuation.resume(returning: "")
+                    return
+                }
+                let data = pipe.fileHandleForReading.readDataToEndOfFile()
+                process.waitUntilExit()
+                continuation.resume(returning: String(data: data, encoding: .utf8) ?? "")
+            }
+        }
     }
 
     // MARK: - Quota Summary Parsing & Aggregation

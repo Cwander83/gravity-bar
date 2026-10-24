@@ -139,16 +139,33 @@ public final class UsageManager: ObservableObject {
         isRefreshing = true
         setupProviders()
 
-        for providerType in ProviderType.allCases {
-            guard let provider = providers[providerType] else { continue }
-            do {
-                let usage = try await provider.fetchUsage()
-                providerUsages[providerType] = usage
-            } catch {
-                // Surface the failure instead of fabricating 0% with fake reset timers
-                providerUsages[providerType] = .unavailable(providerType, state: .error(error.localizedDescription))
+        // Fetch all enabled providers in parallel. fetchUsage is nonisolated async, so child tasks run off the
+        // main actor; only the result assignment below happens on it.
+        let toFetch = ProviderType.allCases
+            .filter { enabledProviders.contains($0) }
+            .compactMap { type in providers[type].map { (type, $0) } }
+
+        let results = await withTaskGroup(of: (ProviderType, ProviderUsage).self) { group in
+            for (providerType, provider) in toFetch {
+                group.addTask {
+                    do {
+                        return (providerType, try await provider.fetchUsage())
+                    } catch {
+                        // Surface the failure instead of fabricating 0% with fake reset timers
+                        return (providerType, .unavailable(providerType, state: .error(error.localizedDescription)))
+                    }
+                }
             }
 
+            var collected: [ProviderType: ProviderUsage] = [:]
+            for await (providerType, usage) in group {
+                collected[providerType] = usage
+            }
+            return collected
+        }
+
+        for (providerType, usage) in results {
+            providerUsages[providerType] = usage
         }
 
         lastUpdated = Date()
