@@ -151,19 +151,22 @@ enum SelfTests {
 
         // Active window: reset counts down from the first non-zero sample, not from the latest sample
         let (activeFH, activeSD) = windows(planSamples([(70, 0, 0), (60, 7, 3), (30, 15, 4), (5, nil, nil), (1, 23, 5)]))
-        check(activeFH.usedPercent == 23 && abs(activeFH.resetDate.timeIntervalSince(now) - (5 * 3600 - 60 * 60)) < 1)
-        check(activeSD.usedPercent == 5 && abs(activeSD.resetDate.timeIntervalSince(now) - (7 * 86400 - 60 * 60)) < 1)
+        let expectedActiveFH: TimeInterval = 4 * 3600
+        let expectedActiveSD: TimeInterval = 7 * 86400 - 3600
+        check(activeFH.usedPercent == 23 && abs(activeFH.resetDate.timeIntervalSince(now) - expectedActiveFH) < 1)
+        check(activeSD.usedPercent == 5 && abs(activeSD.resetDate.timeIntervalSince(now) - expectedActiveSD) < 1)
 
         // Step down means the window reset between samples: new window starts at the lower reading
         let (steppedFH, _) = windows(planSamples([(200, 40, 10), (120, 5, 10)]))
-        check(steppedFH.usedPercent == 5 && abs(steppedFH.resetDate.timeIntervalSince(now) - (5 * 3600 - 120 * 60)) < 1)
+        let expectedSteppedFH: TimeInterval = 3 * 3600
+        check(steppedFH.usedPercent == 5 && abs(steppedFH.resetDate.timeIntervalSince(now) - expectedSteppedFH) < 1)
 
         // Stale: Claude closed for 6h, so the 5h window expired and decays to 0%; weekly still active
         let (staleFH, staleSD) = windows(planSamples([(400, 60, 20), (360, 78, 22)]))
         check(staleFH.usedPercent == 0 && staleSD.usedPercent == 22)
 
         // Weekly expires after 7 days
-        let (_, expiredSD) = windows(planSamples([(8 * 24 * 60, 50, 30)]))
+        let (_, expiredSD) = windows(planSamples([(8.0 * 24 * 60, 50, 30)]))
         check(expiredSD.usedPercent == 0)
         print("✓ Claude window inference tests passed")
 
@@ -177,8 +180,8 @@ enum SelfTests {
             cliLine("msg_a", minutesAgo: 10, input: 5, output: 50),       // final line for the same message id
             cliLine("msg_a", minutesAgo: 10, input: 5, output: 50),       // exact duplicate
             "{\"type\":\"user\",\"message\":{\"role\":\"user\"}}",
-            cliLine("msg_b", minutesAgo: 6 * 60, input: 7, output: 70),   // 7d only
-            cliLine("msg_c", minutesAgo: 8 * 24 * 60, input: 9, output: 90) // outside 7d
+            cliLine("msg_b", minutesAgo: 6.0 * 60, input: 7, output: 70),   // 7d only
+            cliLine("msg_c", minutesAgo: 8.0 * 24 * 60, input: 9, output: 90) // outside 7d
         ].joined(separator: "\n").utf8)
         let cli = ClaudeCodeUsageScanner.aggregate(ClaudeCodeUsageScanner.parseEntries(from: transcript), now: now)
         check(cli.last5h == TokenUsage(inputTokens: 5, outputTokens: 50, cacheReadTokens: 100, cacheCreationTokens: 10))
@@ -187,7 +190,7 @@ enum SelfTests {
         // A recently touched transcript holding only old messages must not surface an empty CLI section
         let staleDir = FileManager.default.temporaryDirectory.appendingPathComponent("gravitybar-cli-\(UUID().uuidString)")
         try? FileManager.default.createDirectory(at: staleDir, withIntermediateDirectories: true)
-        try? Data(cliLine("msg_old", minutesAgo: 30 * 24 * 60, input: 1, output: 1).utf8).write(to: staleDir.appendingPathComponent("old.jsonl"))
+        try? Data(cliLine("msg_old", minutesAgo: 30.0 * 24 * 60, input: 1, output: 1).utf8).write(to: staleDir.appendingPathComponent("old.jsonl"))
         check(ClaudeCodeUsageScanner.scan(projectsPath: staleDir.path, now: now) == nil)
         try? Data(cliLine("msg_new", minutesAgo: 5, input: 1, output: 1).utf8).write(to: staleDir.appendingPathComponent("new.jsonl"))
         check(ClaudeCodeUsageScanner.scan(projectsPath: staleDir.path, now: now)?.last5h.outputTokens == 1)
@@ -206,7 +209,7 @@ enum SelfTests {
         let inTwoHours = Int(now.addingTimeInterval(7200).timeIntervalSince1970)
         let anHourAgo = Int(now.addingTimeInterval(-3600).timeIntervalSince1970)
         let sessionA = Data([
-            codexEvent(minutesAgo: 8 * 60, windows: "\"primary\":{\"used_percent\":40.0,\"window_minutes\":10080,\"resets_at\":\(inOneDay)},\"secondary\":null", input: 1_000, cached: 600, output: 100),
+            codexEvent(minutesAgo: 8.0 * 60, windows: "\"primary\":{\"used_percent\":40.0,\"window_minutes\":10080,\"resets_at\":\(inOneDay)},\"secondary\":null", input: 1_000, cached: 600, output: 100),
             codexEvent(minutesAgo: 60, windows: "\"primary\":{\"used_percent\":13.0,\"window_minutes\":10080,\"resets_at\":\(inOneDay)},\"secondary\":{\"used_percent\":55.0,\"window_minutes\":300,\"resets_at\":\(inTwoHours)}", input: 3_000, cached: 2_000, output: 400)
         ].joined(separator: "\n").utf8)
         // Newer event from a local (Ollama) session carries no windows and must not wipe the rate limits
@@ -254,7 +257,7 @@ enum SelfTests {
         // A running ChatGPT desktop app counts as connected, with or without (stale) Codex CLI logs
         let chatGPTRunning = ActiveModel(name: "ChatGPT desktop", detail: "running", isRunning: true)
         check(CodexProvider.makeUsage(events: [], chatGPTApp: chatGPTRunning, now: now).connectionState == .connected)
-        check(CodexProvider.makeUsage(events: codexEvents, chatGPTApp: chatGPTRunning, now: now.addingTimeInterval(14 * 86400)).connectionState == .connected)
+        check(CodexProvider.makeUsage(events: codexEvents, chatGPTApp: chatGPTRunning, now: now.addingTimeInterval(14.0 * 86400)).connectionState == .connected)
         let chatGPTInstalled = ActiveModel(name: "ChatGPT desktop", detail: "installed")
         check(CodexProvider.makeUsage(events: [], chatGPTApp: chatGPTInstalled, now: now).connectionState == .notConfigured)
         print("✓ Connection state and Ollama tests passed")
@@ -387,14 +390,18 @@ enum SelfTests {
         ).fetchUsage()
         check(claude?.connectionState == .connected)
         check(claude?.fiveHourMetric?.usedPercent == 31)
-        check(abs((claude?.fiveHourMetric?.resetDate.timeIntervalSince(now) ?? 0) - (5 * 3600 - 3600)) < 5, "5h resets from window start")
+        let fhRemaining = claude?.fiveHourMetric?.resetDate.timeIntervalSince(now) ?? 0
+        let expectedFH: TimeInterval = 4 * 3600
+        check(abs(fhRemaining - expectedFH) < 5, "5h resets from window start")
         check(claude?.weeklyMetric?.usedPercent == 11)
-        check(abs((claude?.weeklyMetric?.resetDate.timeIntervalSince(now) ?? 0) - (7 * 86400 - 2880 * 60)) < 5, "7d resets from window start")
+        let sdRemaining = claude?.weeklyMetric?.resetDate.timeIntervalSince(now) ?? 0
+        let expectedSD: TimeInterval = 5 * 86400
+        check(abs(sdRemaining - expectedSD) < 5, "7d resets from window start")
         check(claude?.cliTokenUsage?.last5h == TokenUsage(inputTokens: 10, outputTokens: 900, cacheReadTokens: 5000, cacheCreationTokens: 100))
 
         // Claude: both windows expired (Claude closed 8 days) → 0%, idle
         write("""
-        {"version":1,"samples":[{"t":\(ms(minutesAgo: 8 * 1440)),"org":"o","u":{"fh":78,"sd":60}}]}
+        {"version":1,"samples":[{"t":\(ms(minutesAgo: 8.0 * 1440)),"org":"o","u":{"fh":78,"sd":60}}]}
         """, to: "claude-stale/plan-usage-history.json")
         let staleClaude = try? await ClaudeProvider(
             customStatePath: root.appendingPathComponent("claude-stale/plan-usage-history.json").path,
