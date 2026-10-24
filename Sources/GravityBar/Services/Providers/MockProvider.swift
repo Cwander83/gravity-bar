@@ -43,7 +43,8 @@ public final class MockProvider: UsageProvider {
                     windowType: .weekly,
                     usedPercent: 41.0,
                     resetDate: now.addingTimeInterval((4 * 86400) + (8 * 3600))
-                )
+                ),
+                planBadge: "Plus"
             )
 
         case .gemini:
@@ -74,6 +75,18 @@ public final class MockProvider: UsageProvider {
                         fiveHourMetric: UsageMetric(windowType: .fiveHour, usedPercent: 12.0, resetDate: now.addingTimeInterval(24 * 60)),
                         weeklyMetric: UsageMetric(windowType: .weekly, usedPercent: 5.0, resetDate: now.addingTimeInterval((6 * 86400) + (4 * 3600)))
                     )
+                ]
+            )
+
+        case .ollama:
+            return ProviderUsage(
+                provider: .ollama,
+                fiveHourMetric: nil,
+                weeklyMetric: nil,
+                planBadge: "10 models",
+                models: [
+                    ActiveModel(name: "llama3.3:70b", detail: "running · 42.5 GB", isRunning: true),
+                    ActiveModel(name: "glm-5.3-flash:cloud", detail: "Codex default model")
                 ]
             )
         }

@@ -1,4 +1,5 @@
 import Foundation
+import AppKit
 
 /// Provider for Codex usage metrics, parsing the Codex CLI rollout logs in ~/.codex/sessions/YYYY/MM/DD/rollout-*.jsonl.
 /// Each `token_count` event carries the account's rate-limit windows and the session's cumulative token usage.
@@ -15,12 +16,31 @@ public final class CodexProvider: UsageProvider {
         let path = customStatePath ?? "~/.codex/sessions"
         let now = Date()
         let events = CodexRolloutScanner.scan(path: path)
-        return CodexProvider.makeUsage(events: events, now: now)
+        return CodexProvider.makeUsage(events: events, chatGPTApp: CodexProvider.detectChatGPTApp(), now: now)
+    }
+
+    /// ChatGPT desktop shares the account's OpenAI limits; list it on the card when installed.
+    static func detectChatGPTApp() -> ActiveModel? {
+        let running = NSWorkspace.shared.runningApplications.contains { $0.bundleIdentifier == "com.openai.chat" }
+        let installed = running || FileManager.default.fileExists(atPath: "/Applications/ChatGPT.app")
+        guard installed else { return nil }
+        return ActiveModel(name: "ChatGPT desktop", detail: running ? "running" : "installed", isRunning: running)
     }
 
     /// Builds usage from the latest event that reports rate limits, plus rolling token totals.
-    /// Only windows Codex actually reports are shown (e.g. Plus currently reports a weekly window only).
-    static func makeUsage(events: [CodexRolloutScanner.Event], now: Date = Date()) -> ProviderUsage {
+    /// Only windows Codex actually reports are set (e.g. Plus currently reports a weekly window only).
+    static func makeUsage(events: [CodexRolloutScanner.Event], chatGPTApp: ActiveModel? = nil, now: Date = Date()) -> ProviderUsage {
+        let models = [chatGPTApp].compactMap { $0 }
+        guard let lastSeen = events.map(\.date).max() else {
+            return ProviderUsage(
+                provider: .codex,
+                fiveHourMetric: nil,
+                weeklyMetric: nil,
+                connectionState: .notConfigured,
+                models: models
+            )
+        }
+
         let latest = events
             .filter { !$0.windows.isEmpty }
             .max { $0.date < $1.date }
@@ -32,17 +52,17 @@ public final class CodexProvider: UsageProvider {
             .max { $0.windowMinutes < $1.windowMinutes }?
             .metric(now: now)
 
-        let plan = latest?.planType.map { " · \($0.capitalized) plan" } ?? ""
-        let groups = metrics.isEmpty ? [] : [QuotaGroup(name: "Codex\(plan)", fiveHourMetric: fiveHour, weeklyMetric: longest)]
-
         let tokens = CodexRolloutScanner.tokenUsage(events, now: now)
 
+        // Only windows Codex reports are set; the card hides the missing one
         return ProviderUsage(
             provider: .codex,
-            fiveHourMetric: fiveHour ?? UsageMetric(windowType: .fiveHour, usedPercent: 0, resetDate: now.addingTimeInterval(5 * 3600)),
-            weeklyMetric: longest ?? UsageMetric(windowType: .weekly, usedPercent: 0, resetDate: now.addingTimeInterval(7 * 86400)),
-            groups: groups,
-            cliTokenUsage: tokens.last7d.totalTokens > 0 ? tokens : nil
+            fiveHourMetric: fiveHour,
+            weeklyMetric: longest,
+            cliTokenUsage: tokens.last7d.totalTokens > 0 ? tokens : nil,
+            connectionState: .fromLastSeen(lastSeen, now: now),
+            planBadge: latest?.planType?.capitalized,
+            models: models
         )
     }
 }
@@ -196,7 +216,8 @@ enum CodexRolloutScanner {
 
         return CLITokenUsage(
             last5h: used(since: now.addingTimeInterval(-5 * 3600)),
-            last7d: used(since: now.addingTimeInterval(-7 * 86400))
+            last7d: used(since: now.addingTimeInterval(-7 * 86400)),
+            lastActivity: events.filter { $0.totalUsage != nil && $0.date <= now }.map(\.date).max()
         )
     }
 

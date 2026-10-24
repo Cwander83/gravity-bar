@@ -16,10 +16,12 @@
     - 🔴 **Critical / Rate-Limited**: `> 85%`
   - Reset countdowns (e.g. `78% used • Resets in 1h 42m`).
 - **Provider Support**:
-  1. **Claude**: 5-hour rolling window + weekly window (percentages and reset countdowns).
-  2. **Codex**: rate-limit windows reported by the Codex CLI (5-hour / weekly / monthly, depending on plan) with reset countdowns and token usage.
-  3. **Antigravity / Gemini**: 5-hour rolling window + weekly window (percentages and reset countdowns).
-  4. **Mock Provider**: Zero-config mock dataset for offline design iteration and testing.
+  1. **Claude**: 5-hour rolling window + weekly window from Claude Desktop, plus Claude Code CLI token usage.
+  2. **Codex / ChatGPT**: rate-limit windows reported by the Codex CLI (5-hour / weekly / monthly, depending on plan) with reset countdowns and token usage; the ChatGPT desktop app is listed when installed.
+  3. **Antigravity / Gemini**: per-group 5-hour and weekly windows (Gemini Models, Gemini 4 Argon, Claude and GPT models).
+  4. **Ollama / Llama**: running models (`/api/ps`), installed model count (`/api/tags`) and Codex's Ollama default model. No quota windows.
+  5. **Mock Provider**: Zero-config mock dataset for offline design iteration and testing.
+- **Connection status**: each card shows whether data is live, cached ("Last seen 2h ago"), not configured, or erroring. Providers that aren't detected on this Mac are hidden unless **Show Offline Providers** is on, and never feed the status bar or reset countdown.
 - **Preferences & Configuration**:
   - Per-provider enable/disable toggles (customize per personal or work Mac).
   - Adjustable background polling intervals (30s, 1m, 5m).
@@ -104,7 +106,7 @@ To connect live accounts:
    - **Claude**: `~/Library/Application Support/Claude/plan-usage-history.json` (Claude Desktop plan usage). Claude Code CLI token usage is read automatically from `~/.claude/projects/**/*.jsonl`.
    - **Codex**: `~/.codex/sessions` (Codex CLI rollout logs; rate-limit windows and token counts come from `token_count` events)
    - **Gemini**: `~/.gemini/antigravity-ide/metrics.json`
-5. Click **Apply & Close**. If local files are not yet present, GravityBar gracefully falls back to synthetic mock values without crashing.
+5. Click **Apply & Close**. Providers without local data show as **Not configured** (hidden unless **Show Offline Providers** is on) instead of a fake 0%.
 
 ### 3. Interactive Mockup Preview
 Before or alongside native app usage, you can inspect or modify styles in the browser:

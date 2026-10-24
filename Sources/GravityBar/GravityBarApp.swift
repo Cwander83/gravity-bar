@@ -118,8 +118,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             assert(a.weeklyMetric?.usedPercent == b.weeklyMetric?.usedPercent)
         }
         let merged = AntigravityProvider.makeUsage(groups: mergedAB, now: now)
-        assert(merged.fiveHourMetric.usedPercent == 10.0)
-        assert(merged.weeklyMetric.usedPercent == 26.0)
+        assert(merged.fiveHourMetric?.usedPercent == 10.0)
+        assert(merged.weeklyMetric?.usedPercent == 26.0)
         assert(merged.groups.count == 3)
         assert(mergedAB.map { $0.name } == AntigravityProvider.groupDisplayOrder)
 
@@ -226,8 +226,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let sessionB = Data(codexEvent(minutesAgo: 5, windows: "\"primary\":null,\"secondary\":null", input: 50, cached: 0, output: 5).utf8)
         let codexEvents = CodexRolloutScanner.parseEvents(from: sessionA, session: "a") + CodexRolloutScanner.parseEvents(from: sessionB, session: "b")
         let codexUsage = CodexProvider.makeUsage(events: codexEvents, now: now)
-        assert(codexUsage.fiveHourMetric.usedPercent == 55 && codexUsage.weeklyMetric.usedPercent == 13)
-        assert(codexUsage.weeklyMetric.windowType == .weekly && codexUsage.groups.first?.name == "Codex · Plus plan")
+        assert(codexUsage.fiveHourMetric?.usedPercent == 55 && codexUsage.weeklyMetric?.usedPercent == 13)
+        assert(codexUsage.weeklyMetric?.windowType == .weekly && codexUsage.planBadge == "Plus" && codexUsage.connectionState == .connected)
         // 5h: session A grew 3000-1000 input (incl. cached 2000-600) since the 8h-old baseline; session B is new
         assert(codexUsage.cliTokenUsage?.last5h == TokenUsage(inputTokens: 600 + 50, outputTokens: 300 + 5, cacheReadTokens: 1_400, cacheCreationTokens: 0))
         assert(codexUsage.cliTokenUsage?.last7d == TokenUsage(inputTokens: 1_000 + 50, outputTokens: 400 + 5, cacheReadTokens: 2_000, cacheCreationTokens: 0))
@@ -236,15 +236,37 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let expired = CodexRolloutScanner.Window(usedPercent: 80, windowMinutes: 300, resetsAt: Date(timeIntervalSince1970: TimeInterval(anHourAgo)))
         assert(expired.metric(now: now).usedPercent == 0 && abs(expired.metric(now: now).resetDate.timeIntervalSince(now) - 4 * 3600) < 2)
         assert(CodexRolloutScanner.Window(usedPercent: 1, windowMinutes: 43200, resetsAt: now).windowType == .monthly)
-        assert(CodexProvider.makeUsage(events: [], now: now).groups.isEmpty)
+        assert(CodexProvider.makeUsage(events: [], now: now).connectionState == .notConfigured)
+        // No 5-hour window reported: headline stays nil instead of a fake 0% / now + 5h placeholder
+        let weeklyOnly = CodexProvider.makeUsage(events: CodexRolloutScanner.parseEvents(from: Data(codexEvent(minutesAgo: 30, windows: "\"primary\":{\"used_percent\":20.0,\"window_minutes\":10080,\"resets_at\":\(inOneDay)},\"secondary\":null", input: 1, cached: 0, output: 1).utf8), session: "c"), now: now)
+        assert(weeklyOnly.fiveHourMetric == nil && weeklyOnly.weeklyMetric?.usedPercent == 20)
+        assert(weeklyOnly.connectionState == .idleCached(lastSeen: weeklyOnly.cliTokenUsage!.lastActivity!))
         print("✓ Codex rollout parsing tests passed")
+
+        // 3g. Connection state, offline placeholders and Ollama (CHR-60)
+        assert(ProviderConnectionState.fromLastSeen(now.addingTimeInterval(-60), now: now) == .connected)
+        assert(ProviderConnectionState.fromLastSeen(now.addingTimeInterval(-3 * 3600), now: now).label(relativeTo: now) == "Last seen 3h ago")
+        assert(!ProviderConnectionState.notConfigured.isDetected && !ProviderConnectionState.error("x").isDetected)
+        let offline = ProviderUsage.unavailable(.claude, state: .notConfigured)
+        assert(offline.allMetrics.isEmpty && offline.highestPercent == 0 && offline.highestUrgency == .normal)
+
+        let ollamaTags = Data("{\"models\":[{\"name\":\"qwen2.5-coder:latest\"},{\"name\":\"llama3.3:70b\"}]}".utf8)
+        let ollamaPs = Data("{\"models\":[{\"name\":\"llama3.3:70b\",\"size_vram\":42500000000}]}".utf8)
+        let ollama = OllamaProvider.makeUsage(tagsData: ollamaTags, psData: ollamaPs, configuredModel: "glm-5.3-flash:cloud")
+        assert(ollama.planBadge == "2 models" && ollama.allMetrics.isEmpty)
+        assert(ollama.models.map(\.name) == ["llama3.3:70b", "glm-5.3-flash:cloud"] && ollama.models[0].isRunning)
+        assert(OllamaProvider.configuredModel(fromTOML: "model = \"glm-5.3-flash:cloud\"\nmodel_provider = \"ollama-launch\"\n[x]\nmodel = \"nope\"") == "glm-5.3-flash:cloud")
+        assert(OllamaProvider.configuredModel(fromTOML: "[model_providers.x]\nmodel = \"nope\"") == nil)
+        print("✓ Connection state and Ollama tests passed")
+
+        func pct(_ metric: UsageMetric?) -> String { metric.map { "\(Int($0.usedPercent))% used" } ?? "n/a" }
 
         // 4. Claude Real Data Provider Test
         let claudeProv = ClaudeProvider()
         if let u = try? await claudeProv.fetchUsage() {
             assert(u.provider == .claude)
-            print("✓ Claude real data provider parsed: 5h=\(Int(u.fiveHourMetric.usedPercent))% used, weekly=\(Int(u.weeklyMetric.usedPercent))% used")
-            print("    • 5h resets: \(u.fiveHourMetric.formattedReset()), weekly: \(u.weeklyMetric.formattedReset())")
+            print("✓ Claude real data provider parsed: 5h=\(pct(u.fiveHourMetric)), long window=\(pct(u.weeklyMetric)), state=\(u.connectionState.label() ?? "connected")")
+            print("    • 5h \(u.fiveHourMetric?.formattedReset() ?? "n/a"), weekly \(u.weeklyMetric?.formattedReset() ?? "n/a")")
             if let cli = u.cliTokenUsage {
                 print("    • Claude Code CLI last 5h: \(cli.last5h.summary)")
                 print("    • Claude Code CLI last 7d: \(cli.last7d.summary)")
@@ -254,20 +276,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // 4b. Codex Real Data Provider Test
         if let u = try? await CodexProvider().fetchUsage() {
             assert(u.provider == .codex)
-            print("✓ Codex real data provider parsed: 5h=\(Int(u.fiveHourMetric.usedPercent))% used, long window=\(Int(u.weeklyMetric.usedPercent))% used")
-            for group in u.groups {
-                print("    • \(group.name): " + group.metrics.map { "\($0.windowType.rawValue)=\($0.usageSummary), \($0.formattedReset())" }.joined(separator: "; "))
-            }
+            print("✓ Codex real data provider parsed: 5h=\(pct(u.fiveHourMetric)), long window=\(pct(u.weeklyMetric)), state=\(u.connectionState.label() ?? "connected")")
+            print("    • plan=\(u.planBadge ?? "-"), models=\(u.models.map(\.name)), weekly=\(u.weeklyMetric.map { "\($0.windowType.rawValue) \($0.usageSummary), \($0.formattedReset())" } ?? "n/a")")
             if let cli = u.cliTokenUsage {
                 print("    • Codex CLI last 7d: \(cli.last7d.summary)")
             }
+        }
+
+        // 4c. Ollama Real Data Provider Test
+        if let u = try? await OllamaProvider().fetchUsage() {
+            print("✓ Ollama provider: state=\(u.connectionState.label() ?? "connected"), badge=\(u.planBadge ?? "-"), models=\(u.models.map { "\($0.name) (\($0.detail ?? ""))" })")
         }
 
         // 5. Antigravity Real Data Provider Test
         let geminiProv = AntigravityProvider()
         if let u = try? await geminiProv.fetchUsage() {
             assert(u.provider == .gemini)
-            print("✓ Antigravity real data provider parsed: 5h=\(Int(u.fiveHourMetric.usedPercent))% used, weekly=\(Int(u.weeklyMetric.usedPercent))% used")
+            print("✓ Antigravity real data provider parsed: 5h=\(pct(u.fiveHourMetric)), long window=\(pct(u.weeklyMetric)), state=\(u.connectionState.label() ?? "connected")")
             for group in u.groups {
                 print("    • \(group.name): " + group.metrics.map { "\($0.windowType.rawValue)=\($0.usageSummary)" }.joined(separator: ", "))
             }
