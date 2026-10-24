@@ -4,7 +4,6 @@ import SwiftUI
 @MainActor
 public struct SettingsView: View {
     @ObservedObject var manager: UsageManager
-    @Environment(\.dismiss) private var dismiss
 
     public init(manager: UsageManager) {
         self.manager = manager
@@ -18,6 +17,13 @@ public struct SettingsView: View {
         VStack(spacing: 0) {
             // Header
             HStack {
+                Button(action: { dismiss() }) {
+                    Image(systemName: "chevron.left")
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundColor(.secondary)
+                }
+                .buttonStyle(.plain)
+                .keyboardShortcut(.cancelAction)
                 Text("Preferences & Providers")
                     .font(.system(size: 14, weight: .bold))
                 Spacer()
@@ -98,9 +104,9 @@ public struct SettingsView: View {
                             .foregroundColor(.secondary)
 
                         VStack(spacing: 8) {
-                            pathInputField(label: "Claude Plan Usage History", text: $manager.claudePath)
-                            pathInputField(label: "Codex Sessions", text: $manager.codexPath)
-                            pathInputField(label: "Gemini Cache", text: $manager.geminiPath)
+                            pathInputField(label: "Claude Plan Usage History", text: $manager.claudePath, defaultPath: ProviderPaths.claudeDefault)
+                            pathInputField(label: "Codex Sessions", text: $manager.codexPath, defaultPath: ProviderPaths.codexDefault)
+                            pathInputField(label: "Gemini Cache", text: $manager.geminiPath, defaultPath: ProviderPaths.geminiDefault)
                         }
                     }
 
@@ -166,11 +172,25 @@ public struct SettingsView: View {
                     }
                     .buttonStyle(.plain)
                     .padding(.top, 6)
+
+                    Button(action: { NSApp.terminate(nil) }) {
+                        Label("Quit GravityBar", systemImage: "power")
+                            .font(.system(size: 11, weight: .medium))
+                            .foregroundColor(.secondary)
+                            .frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(.plain)
+                    .keyboardShortcut("q", modifiers: .command)
                 }
                 .padding(16)
             }
         }
-        .frame(width: GravityBarTokens.popoverWidth, height: 480)
+        .frame(width: GravityBarTokens.popoverWidth, height: 460)
+    }
+
+    /// Returns to the readout inside the popover.
+    private func dismiss() {
+        manager.showingSettings = false
     }
 
     private func providerToggleRow(title: String, subtitle: String, isEnabled: Bool, onToggle: @escaping () -> Void) -> some View {
@@ -197,12 +217,22 @@ public struct SettingsView: View {
         )
     }
 
-    private func pathInputField(label: String, text: Binding<String>) -> some View {
+    private func pathInputField(label: String, text: Binding<String>, defaultPath: String) -> some View {
         VStack(alignment: .leading, spacing: 3) {
-            Text(label)
-                .font(.system(size: 10, weight: .medium))
-                .foregroundColor(.secondary)
-            TextField(label, text: text)
+            HStack {
+                Text(label)
+                    .font(.system(size: 10, weight: .medium))
+                    .foregroundColor(.secondary)
+                Spacer()
+                if text.wrappedValue != defaultPath {
+                    Button("Reset to Default") { text.wrappedValue = defaultPath }
+                        .buttonStyle(.plain)
+                        .font(.system(size: 10, weight: .medium))
+                        .foregroundColor(GravityBarTokens.colorAccent)
+                }
+            }
+            // An empty field falls back to the default path when providers read it
+            TextField(defaultPath, text: text)
                 .textFieldStyle(.roundedBorder)
                 .font(.system(size: 11, design: .monospaced))
         }

@@ -15,6 +15,23 @@ public struct PopoverView: View {
     }
 
     public var body: some View {
+        // Settings slides in inside the popover (as in mockup/index.html) instead of a modal sheet
+        // that would overflow the transient popover.
+        ZStack {
+            if manager.showingSettings {
+                SettingsView(manager: manager)
+                    .transition(.move(edge: .trailing))
+            } else {
+                readoutView
+                    .transition(.move(edge: .leading))
+            }
+        }
+        .animation(.easeInOut(duration: 0.2), value: manager.showingSettings)
+        .frame(width: GravityBarTokens.popoverWidth)
+        .background(VisualEffectView(material: .popover, blendingMode: .behindWindow))
+    }
+
+    private var readoutView: some View {
         VStack(spacing: 0) {
             // Header
             headerView
@@ -44,11 +61,6 @@ public struct PopoverView: View {
 
             // Footer
             footerView
-        }
-        .frame(width: GravityBarTokens.popoverWidth)
-        .background(VisualEffectView(material: .popover, blendingMode: .behindWindow))
-        .sheet(isPresented: $manager.showingSettings) {
-            SettingsView(manager: manager)
         }
     }
 
@@ -243,6 +255,17 @@ public struct PopoverView: View {
                     .font(.system(size: 10, weight: .medium))
                     .foregroundColor(.secondary)
             }
+
+            // Quit (also reachable via right-click menu); ⌘Q works while the popover has focus
+            Button(action: { NSApp.terminate(nil) }) {
+                Image(systemName: "power")
+                    .font(.system(size: 10, weight: .semibold))
+                    .foregroundColor(.secondary)
+            }
+            .buttonStyle(.plain)
+            .keyboardShortcut("q", modifiers: .command)
+            .help("Quit GravityBar (⌘Q)")
+            .padding(.leading, 6)
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 10)

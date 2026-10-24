@@ -295,6 +295,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         assert(missingBinary == "")
         print("✓ language_server discovery parsing tests passed")
 
+        // 3i. UI helpers: path overrides and status item title (CHR-62)
+        assert(ProviderPaths.resolve(nil, default: "~/d") == "~/d")
+        assert(ProviderPaths.resolve("", default: "~/d") == "~/d")
+        assert(ProviderPaths.resolve("  \n", default: "~/d") == "~/d")
+        assert(ProviderPaths.resolve(" ~/custom.json ", default: "~/d") == "~/custom.json")
+        assert(StatusBarController.statusTitle(hasReadings: true, usedPercent: 0) == "0%")
+        assert(StatusBarController.statusTitle(hasReadings: true, usedPercent: 41.6) == "42%")
+        assert(StatusBarController.statusTitle(hasReadings: false, usedPercent: 0) == "--%")
+        print("✓ Path override and status title tests passed")
+
         // 4. Claude Real Data Provider Test
         let claudeProv = ClaudeProvider()
         if let u = try? await claudeProv.fetchUsage() {

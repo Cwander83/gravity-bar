@@ -22,8 +22,7 @@ public final class AntigravityProvider: UsageProvider {
         }
 
         // 2. Fallback to custom / default JSON file if configured
-        let defaultPath = "~/.gemini/antigravity-ide/metrics.json"
-        let path = customStatePath ?? defaultPath
+        let path = ProviderPaths.resolve(customStatePath, default: ProviderPaths.geminiDefault)
         let expandedPath = (path as NSString).expandingTildeInPath
 
         // No live language server and no fallback file: Antigravity isn't running or installed here
