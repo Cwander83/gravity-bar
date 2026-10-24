@@ -69,8 +69,16 @@ codesign --verify --strict --verbose=2 "${APP_DIR}"
 echo "✓ Successfully bundled ${APP_NAME}.app at ${APP_DIR}"
 
 if [[ "${1:-}" == "--install" ]]; then
+    if pgrep -x "${APP_NAME}" >/dev/null 2>&1; then
+        echo "==> Stopping running ${APP_NAME}..."
+        killall "${APP_NAME}" 2>/dev/null || true
+        sleep 0.5
+    fi
     echo "==> Installing to /Applications/${APP_NAME}.app..."
     rm -rf "/Applications/${APP_NAME}.app"
     cp -R "${APP_DIR}" "/Applications/${APP_NAME}.app"
     echo "✓ Installed to /Applications/${APP_NAME}.app"
+    echo "==> Launching /Applications/${APP_NAME}.app..."
+    open -a "/Applications/${APP_NAME}.app"
+    echo "✓ Launched ${APP_NAME}"
 fi
