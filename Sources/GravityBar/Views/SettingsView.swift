@@ -66,8 +66,8 @@ public struct SettingsView: View {
                             }
 
                             providerToggleRow(
-                                title: "Codex",
-                                subtitle: "Work account quotas and limits",
+                                title: "Codex / ChatGPT",
+                                subtitle: "Codex CLI rate limits, tokens, ChatGPT app",
                                 isEnabled: manager.enabledProviders.contains(.codex)
                             ) {
                                 manager.toggleProvider(.codex)
@@ -80,6 +80,14 @@ public struct SettingsView: View {
                             ) {
                                 manager.toggleProvider(.gemini)
                             }
+
+                            providerToggleRow(
+                                title: "Ollama / Llama",
+                                subtitle: "Local and cloud models via Ollama",
+                                isEnabled: manager.enabledProviders.contains(.ollama)
+                            ) {
+                                manager.toggleProvider(.ollama)
+                            }
                         }
                     }
 
@@ -90,8 +98,8 @@ public struct SettingsView: View {
                             .foregroundColor(.secondary)
 
                         VStack(spacing: 8) {
-                            pathInputField(label: "Claude State", text: $manager.claudePath)
-                            pathInputField(label: "Codex Session", text: $manager.codexPath)
+                            pathInputField(label: "Claude Plan Usage History", text: $manager.claudePath)
+                            pathInputField(label: "Codex Sessions", text: $manager.codexPath)
                             pathInputField(label: "Gemini Cache", text: $manager.geminiPath)
                         }
                     }
@@ -108,6 +116,17 @@ public struct SettingsView: View {
                                     Text("Mock Provider Mode")
                                         .font(.system(size: 12, weight: .medium))
                                     Text("Simulates quotas without live account credentials")
+                                        .font(.system(size: 10))
+                                        .foregroundColor(.secondary)
+                                }
+                            }
+                            .toggleStyle(.switch)
+
+                            Toggle(isOn: $manager.showOfflineProviders) {
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text("Show Offline Providers")
+                                        .font(.system(size: 12, weight: .medium))
+                                    Text("Also list providers that are not installed or not running")
                                         .font(.system(size: 10))
                                         .foregroundColor(.secondary)
                                 }

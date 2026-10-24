@@ -13,18 +13,34 @@ public struct UsageMetricRowView: View {
             // Provider Header
             HStack(spacing: 8) {
                 providerIcon
-                Text(usage.provider.rawValue)
+                Text(usage.provider.displayName)
                     .font(.system(size: 13, weight: .bold))
                     .foregroundColor(.primary)
+                if let badge = usage.planBadge {
+                    Text(badge.uppercased())
+                        .font(.system(size: 8, weight: .black))
+                        .padding(.horizontal, 5)
+                        .padding(.vertical, 2)
+                        .background(Color.white.opacity(0.08))
+                        .foregroundColor(.secondary)
+                        .cornerRadius(4)
+                }
                 Spacer()
+                if let status = usage.connectionState.label() {
+                    connectionStatusView(status)
+                }
             }
 
             if usage.groups.isEmpty {
                 // 5-Hour Window Meter
-                windowMeterView(metric: usage.fiveHourMetric)
+                if let fiveHour = usage.fiveHourMetric {
+                    windowMeterView(metric: fiveHour)
+                }
 
                 // Weekly Window Meter
-                windowMeterView(metric: usage.weeklyMetric)
+                if let weekly = usage.weeklyMetric {
+                    windowMeterView(metric: weekly)
+                }
             } else {
                 // Per-group meters (e.g. Gemini Models, Gemini 4 Argon, Claude and GPT models)
                 ForEach(usage.groups) { group in
@@ -32,10 +48,21 @@ public struct UsageMetricRowView: View {
                 }
             }
 
+            if !usage.models.isEmpty {
+                modelsView(usage.models)
+            }
+
             if let cli = usage.cliTokenUsage {
                 cliTokenUsageView(cli)
             }
+
+            if usage.allMetrics.isEmpty, usage.models.isEmpty, usage.cliTokenUsage == nil {
+                Text(usage.connectionState.isDetected ? "No usage reported yet" : "No local data found on this Mac")
+                    .font(.system(size: 11))
+                    .foregroundColor(.secondary)
+            }
         }
+        .opacity(usage.connectionState.isDetected ? 1 : 0.6)
         .padding(.horizontal, 14)
         .padding(.vertical, 12)
         .background(
@@ -68,6 +95,10 @@ public struct UsageMetricRowView: View {
                 Image(systemName: "sparkles")
                     .font(.system(size: 10, weight: .bold))
                     .foregroundColor(.white)
+            case .ollama:
+                Image(systemName: "cpu")
+                    .font(.system(size: 10, weight: .bold))
+                    .foregroundColor(.white)
             }
         }
     }
@@ -88,6 +119,50 @@ public struct UsageMetricRowView: View {
                 startPoint: .topLeading,
                 endPoint: .bottomTrailing
             ))
+        case .ollama:
+            return AnyShapeStyle(Color(white: 0.35))
+        }
+    }
+
+    private func connectionStatusView(_ status: String) -> some View {
+        let isError: Bool
+        if case .error = usage.connectionState { isError = true } else { isError = false }
+
+        return HStack(spacing: 4) {
+            Circle()
+                .fill(isError ? GravityBarTokens.colorCritical : Color.secondary)
+                .frame(width: 5, height: 5)
+            Text(status)
+                .font(.system(size: 9, weight: .semibold))
+                .foregroundColor(.secondary)
+                .lineLimit(1)
+        }
+    }
+
+    private func modelsView(_ models: [ActiveModel]) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text("MODELS")
+                .font(.system(size: 9, weight: .black))
+                .foregroundColor(.secondary)
+
+            ForEach(models) { model in
+                HStack(spacing: 6) {
+                    Circle()
+                        .fill(model.isRunning ? GravityBarTokens.colorNormal : Color.secondary.opacity(0.5))
+                        .frame(width: 6, height: 6)
+                    Text(model.name)
+                        .font(.system(size: 11, weight: .medium, design: .monospaced))
+                        .foregroundColor(.primary)
+                        .lineLimit(1)
+                    Spacer()
+                    if let detail = model.detail {
+                        Text(detail)
+                            .font(.system(size: 10))
+                            .foregroundColor(.secondary)
+                            .lineLimit(1)
+                    }
+                }
+            }
         }
     }
 

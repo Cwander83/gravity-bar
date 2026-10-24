@@ -205,7 +205,10 @@ public struct PopoverView: View {
                 .foregroundColor(.secondary)
             Text("No Active Providers")
                 .font(.system(size: 13, weight: .semibold))
-            Text("Enable providers in Preferences to track quotas")
+            Text(manager.showOfflineProviders
+                 ? "Enable providers in Preferences to track quotas"
+                 : "No AI tools detected on this Mac. Turn on Show Offline Providers to see all.")
+                .multilineTextAlignment(.center)
                 .font(.system(size: 11))
                 .foregroundColor(.secondary)
 

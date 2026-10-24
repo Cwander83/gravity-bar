@@ -26,8 +26,13 @@ public final class AntigravityProvider: UsageProvider {
         let path = customStatePath ?? defaultPath
         let expandedPath = (path as NSString).expandingTildeInPath
 
-        if FileManager.default.fileExists(atPath: expandedPath),
-           let data = try? Data(contentsOf: URL(fileURLWithPath: expandedPath)),
+        // No live language server and no fallback file: Antigravity isn't running or installed here
+        guard FileManager.default.fileExists(atPath: expandedPath) else {
+            return .unavailable(.gemini, state: .notConfigured)
+        }
+        let modified = (try? FileManager.default.attributesOfItem(atPath: expandedPath)[.modificationDate]) as? Date ?? now
+
+        if let data = try? Data(contentsOf: URL(fileURLWithPath: expandedPath)),
            let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
             if let fh = json["fiveHourPercent"] as? Double { fiveHour = fh }
             else if let fhInt = json["fiveHourPercent"] as? Int { fiveHour = Double(fhInt) }
@@ -58,7 +63,8 @@ public final class AntigravityProvider: UsageProvider {
                 windowType: .weekly,
                 usedPercent: weekly,
                 resetDate: resetWeekly
-            )
+            ),
+            connectionState: .idleCached(lastSeen: modified)
         )
     }
 
@@ -247,9 +253,10 @@ public final class AntigravityProvider: UsageProvider {
 
         return ProviderUsage(
             provider: .gemini,
-            fiveHourMetric: fiveHour ?? UsageMetric(windowType: .fiveHour, usedPercent: 0, resetDate: now.addingTimeInterval(5 * 3600)),
-            weeklyMetric: weekly ?? UsageMetric(windowType: .weekly, usedPercent: 0, resetDate: now.addingTimeInterval(7 * 86400)),
-            groups: groups
+            fiveHourMetric: fiveHour,
+            weeklyMetric: weekly,
+            groups: groups,
+            connectionState: .connected
         )
     }
 

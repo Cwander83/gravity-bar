@@ -24,15 +24,24 @@ public final class ClaudeProvider: UsageProvider {
             samples = ClaudeProvider.parseSamples(from: data)
         }
 
+        let cli = ClaudeCodeUsageScanner.scan(projectsPath: cliProjectsPath, now: now)
+        let lastSeen = [samples.last?.date, cli?.lastActivity].compactMap { $0 }.max()
+        guard let lastSeen else {
+            return .unavailable(.claude, state: .notConfigured)
+        }
+
+        // Plan windows come from Claude Desktop; a CLI-only install has token counts but no plan percentages
+        let hasPlanHistory = !samples.isEmpty
         return ProviderUsage(
             provider: .claude,
-            fiveHourMetric: ClaudeProvider.currentWindow(
+            fiveHourMetric: hasPlanHistory ? ClaudeProvider.currentWindow(
                 samples: samples, value: \.fiveHour, windowType: .fiveHour, length: 5 * 3600, now: now
-            ),
-            weeklyMetric: ClaudeProvider.currentWindow(
+            ) : nil,
+            weeklyMetric: hasPlanHistory ? ClaudeProvider.currentWindow(
                 samples: samples, value: \.weekly, windowType: .weekly, length: 7 * 86400, now: now
-            ),
-            cliTokenUsage: ClaudeCodeUsageScanner.scan(projectsPath: cliProjectsPath, now: now)
+            ) : nil,
+            cliTokenUsage: cli,
+            connectionState: .fromLastSeen(lastSeen, now: now)
         )
     }
 
@@ -206,17 +215,19 @@ enum ClaudeCodeUsageScanner {
 
         var last5h = TokenUsage()
         var last7d = TokenUsage()
+        var lastActivity: Date?
 
         for entry in byId.values {
             let age = now.timeIntervalSince(entry.date)
             guard age >= 0, age <= 7 * 86400 else { continue }
+            lastActivity = max(lastActivity ?? entry.date, entry.date)
             last7d = last7d + entry.usage
             if age <= 5 * 3600 {
                 last5h = last5h + entry.usage
             }
         }
 
-        return CLITokenUsage(last5h: last5h, last7d: last7d)
+        return CLITokenUsage(last5h: last5h, last7d: last7d, lastActivity: lastActivity)
     }
 
     // Shared formatters: transcripts can hold thousands of lines per poll
