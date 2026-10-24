@@ -49,8 +49,10 @@ public final class StatusBarController: NSObject, NSPopoverDelegate {
         popover = NSPopover()
         popover.behavior = .transient
         popover.animates = true
-        popover.contentSize = NSSize(width: GravityBarTokens.popoverWidth, height: 420)
-        popover.contentViewController = NSHostingController(rootView: PopoverView(manager: manager))
+        // Size the popover from the SwiftUI content so inline Settings and the readout can differ in height
+        let hostingController = NSHostingController(rootView: PopoverView(manager: manager))
+        hostingController.sizingOptions = .preferredContentSize
+        popover.contentViewController = hostingController
         popover.delegate = self
     }
 
@@ -68,8 +70,7 @@ public final class StatusBarController: NSObject, NSPopoverDelegate {
     private func updateButtonUI() {
         guard let button = statusItem.button else { return }
 
-        let percent = Int(round(manager.maxUrgencyPercent))
-        let titleString = percent > 0 ? "\(percent)%" : "--%"
+        let titleString = StatusBarController.statusTitle(hasReadings: manager.hasReadings, usedPercent: manager.maxUrgencyPercent)
 
         // Configure SF Symbol gauge icon
         let iconName = manager.highestUrgency == .critical
@@ -87,14 +88,54 @@ public final class StatusBarController: NSObject, NSPopoverDelegate {
         button.font = NSFont.monospacedDigitSystemFont(ofSize: 11, weight: .semibold)
     }
 
+    /// "--%" only while loading or when nothing is detected; an idle provider at 0% is a real reading.
+    nonisolated static func statusTitle(hasReadings: Bool, usedPercent: Double) -> String {
+        hasReadings ? "\(Int(round(usedPercent)))%" : "--%"
+    }
+
     // MARK: - Actions & Events
 
     @objc private func statusItemClicked(_ sender: NSStatusBarButton) {
+        if NSApp.currentEvent?.type == .rightMouseUp {
+            showContextMenu()
+            return
+        }
+
         if popover.isShown {
             closePopover(sender)
         } else {
             showPopover(sender)
         }
+    }
+
+    /// Right-click menu with quick actions. Assigned only while open so left-click keeps toggling the popover.
+    private func showContextMenu() {
+        if popover.isShown {
+            closePopover(nil)
+        }
+
+        let menu = NSMenu()
+        menu.addItem(withTitle: "Refresh Now", action: #selector(refreshNow), keyEquivalent: "r").target = self
+        menu.addItem(withTitle: "Preferences…", action: #selector(openPreferences), keyEquivalent: ",").target = self
+        menu.addItem(.separator())
+        menu.addItem(withTitle: "Quit GravityBar", action: #selector(quitApp), keyEquivalent: "q").target = self
+
+        statusItem.menu = menu
+        statusItem.button?.performClick(nil)
+        statusItem.menu = nil
+    }
+
+    @objc private func refreshNow() {
+        Task { await manager.refreshAll() }
+    }
+
+    @objc private func openPreferences() {
+        manager.showingSettings = true
+        showPopover(nil)
+    }
+
+    @objc private func quitApp() {
+        NSApp.terminate(nil)
     }
 
     public func showPopover(_ sender: AnyObject?) {
@@ -136,6 +177,9 @@ public final class StatusBarController: NSObject, NSPopoverDelegate {
 /// Helper view tracking mouse cursor entry for menu bar hover interactions.
 final class HoverTrackingView: NSView {
     var onHover: (() -> Void)?
+    /// The cursor must rest on the item this long, so passing through to Control Center doesn't open it.
+    static let dwellDelay: TimeInterval = 0.2
+    private var pendingHover: DispatchWorkItem?
 
     override func updateTrackingAreas() {
         super.updateTrackingAreas()
@@ -151,7 +195,16 @@ final class HoverTrackingView: NSView {
 
     override func mouseEntered(with event: NSEvent) {
         super.mouseEntered(with: event)
-        onHover?()
+        pendingHover?.cancel()
+        let work = DispatchWorkItem { [weak self] in self?.onHover?() }
+        pendingHover = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + HoverTrackingView.dwellDelay, execute: work)
+    }
+
+    override func mouseExited(with event: NSEvent) {
+        super.mouseExited(with: event)
+        pendingHover?.cancel()
+        pendingHover = nil
     }
 }
 

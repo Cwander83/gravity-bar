@@ -20,6 +20,13 @@ public final class UsageManager: ObservableObject {
         }
     }
 
+    /// Show providers that are not installed or not running. Off by default: only detected providers appear.
+    @Published public var showOfflineProviders: Bool {
+        didSet {
+            UserDefaults.standard.set(showOfflineProviders, forKey: "GravityBar_showOfflineProviders")
+        }
+    }
+
     @Published public var hoverToOpen: Bool {
         didSet {
             UserDefaults.standard.set(hoverToOpen, forKey: "GravityBar_hoverToOpen")
@@ -67,20 +74,38 @@ public final class UsageManager: ObservableObject {
         let defaults = UserDefaults.standard
 
         if let savedProviders = defaults.array(forKey: "GravityBar_enabledProviders") as? [String] {
-            self.enabledProviders = Set(savedProviders.compactMap { ProviderType(rawValue: $0) })
+            // Providers added after the list was saved (e.g. Ollama) start enabled; ones the user turned off stay off
+            let known = Set((defaults.array(forKey: "GravityBar_knownProviders") as? [String]) ?? ["Claude", "Codex", "Antigravity / Gemini"])
+            let added = ProviderType.allCases.filter { !known.contains($0.rawValue) }
+            self.enabledProviders = Set(savedProviders.compactMap { ProviderType(rawValue: $0) } + added)
         } else {
             self.enabledProviders = Set(ProviderType.allCases)
         }
+        defaults.set(ProviderType.allCases.map(\.rawValue), forKey: "GravityBar_knownProviders")
 
         self.isMockMode = defaults.object(forKey: "GravityBar_isMockMode") as? Bool ?? false
         self.hoverToOpen = defaults.object(forKey: "GravityBar_hoverToOpen") as? Bool ?? true
+        self.showOfflineProviders = defaults.object(forKey: "GravityBar_showOfflineProviders") as? Bool ?? false
 
         let interval = defaults.double(forKey: "GravityBar_pollingInterval")
         self.pollingIntervalSeconds = interval > 0 ? interval : 60.0
 
-        self.claudePath = defaults.string(forKey: "GravityBar_claudePath") ?? "~/Library/Application Support/Claude/plan-usage-history.json"
-        self.codexPath = defaults.string(forKey: "GravityBar_codexPath") ?? "~/.codex/session.json"
-        self.geminiPath = defaults.string(forKey: "GravityBar_geminiPath") ?? "~/.gemini/antigravity-ide/metrics.json"
+        let claudeDefaultPath = ProviderPaths.claudeDefault
+        let legacyClaudePath = "~/.claude/state.json"
+        // Earlier builds defaulted to ~/.claude/state.json, which Claude never writes; migrate it to the real file
+        if let saved = defaults.string(forKey: "GravityBar_claudePath"), saved != legacyClaudePath {
+            self.claudePath = saved
+        } else {
+            self.claudePath = claudeDefaultPath
+        }
+        let codexDefaultPath = ProviderPaths.codexDefault
+        // Earlier builds defaulted to ~/.codex/session.json, which Codex never writes; migrate it to the rollout logs
+        if let saved = defaults.string(forKey: "GravityBar_codexPath"), saved != "~/.codex/session.json" {
+            self.codexPath = saved
+        } else {
+            self.codexPath = codexDefaultPath
+        }
+        self.geminiPath = defaults.string(forKey: "GravityBar_geminiPath") ?? ProviderPaths.geminiDefault
 
 
         setupProviders()
@@ -97,13 +122,15 @@ public final class UsageManager: ObservableObject {
             providers = [
                 .claude: MockProvider(providerType: .claude),
                 .codex: MockProvider(providerType: .codex),
-                .gemini: MockProvider(providerType: .gemini)
+                .gemini: MockProvider(providerType: .gemini),
+                .ollama: MockProvider(providerType: .ollama)
             ]
         } else {
             providers = [
                 .claude: ClaudeProvider(customStatePath: claudePath),
                 .codex: CodexProvider(customStatePath: codexPath),
-                .gemini: AntigravityProvider(customStatePath: geminiPath)
+                .gemini: AntigravityProvider(customStatePath: geminiPath),
+                .ollama: OllamaProvider()
             ]
         }
     }
@@ -112,34 +139,60 @@ public final class UsageManager: ObservableObject {
         isRefreshing = true
         setupProviders()
 
-        for providerType in ProviderType.allCases {
-            guard let provider = providers[providerType] else { continue }
-            do {
-                let usage = try await provider.fetchUsage()
-                providerUsages[providerType] = usage
-            } catch {
-                let fallback = ProviderUsage(
-                    provider: providerType,
-                    fiveHourMetric: UsageMetric(windowType: .fiveHour, usedPercent: 0.0, resetDate: Date().addingTimeInterval(5 * 3600)),
-                    weeklyMetric: UsageMetric(windowType: .weekly, usedPercent: 0.0, resetDate: Date().addingTimeInterval(7 * 86400))
-                )
-                providerUsages[providerType] = fallback
+        // Fetch all enabled providers in parallel. fetchUsage is nonisolated async, so child tasks run off the
+        // main actor; only the result assignment below happens on it.
+        let toFetch = ProviderType.allCases
+            .filter { enabledProviders.contains($0) }
+            .compactMap { type in providers[type].map { (type, $0) } }
+
+        let results = await withTaskGroup(of: (ProviderType, ProviderUsage).self) { group in
+            for (providerType, provider) in toFetch {
+                group.addTask {
+                    do {
+                        return (providerType, try await provider.fetchUsage())
+                    } catch {
+                        // Surface the failure instead of fabricating 0% with fake reset timers
+                        return (providerType, .unavailable(providerType, state: .error(error.localizedDescription)))
+                    }
+                }
             }
 
+            var collected: [ProviderType: ProviderUsage] = [:]
+            for await (providerType, usage) in group {
+                collected[providerType] = usage
+            }
+            return collected
+        }
+
+        for (providerType, usage) in results {
+            providerUsages[providerType] = usage
         }
 
         lastUpdated = Date()
         isRefreshing = false
     }
 
+    /// Enabled providers shown in the popover: detected ones, plus offline ones when Show Offline Providers is on.
     public var activeUsages: [ProviderUsage] {
         ProviderType.allCases
             .filter { enabledProviders.contains($0) }
             .compactMap { providerUsages[$0] }
+            .filter { showOfflineProviders || $0.connectionState.isDetected }
+    }
+
+    /// Usages whose numbers feed the status bar, banner and countdown (never offline placeholders).
+    private var detectedUsages: [ProviderUsage] {
+        activeUsages.filter { $0.connectionState.isDetected }
+    }
+
+    /// True once a refresh has finished and at least one shown provider has real data, so 0% is a reading
+    /// rather than "not loaded yet".
+    public var hasReadings: Bool {
+        lastUpdated != nil && !detectedUsages.isEmpty
     }
 
     public var maxUrgencyPercent: Double {
-        activeUsages.map { $0.highestPercent }.max() ?? 0.0
+        detectedUsages.map { $0.highestPercent }.max() ?? 0.0
     }
 
     public var highestUrgency: QuotaThreshold {
@@ -159,9 +212,11 @@ public final class UsageManager: ObservableObject {
     }
 
     public var nextResetCountdownText: String {
-        let allMetrics = activeUsages.flatMap { [$0.fiveHourMetric, $0.weeklyMetric] }
+        // Include per-group buckets: one may reset sooner than the most-consumed headline bucket.
+        // Windows at 0% have nothing to reset (their reset is just "next use + window"), so skip them.
+        let allMetrics = detectedUsages.flatMap(\.allMetrics).filter { $0.usedPercent > 0 }
         guard let earliest = allMetrics.map({ $0.resetDate }).filter({ $0 > Date() }).min() else {
-            return "Resets momentarily"
+            return "None pending"
         }
         let metric = UsageMetric(windowType: .fiveHour, usedPercent: 0, resetDate: earliest)
         return metric.formattedReset()

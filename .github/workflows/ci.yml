@@ -35,4 +35,5 @@ jobs:
           ./scripts/build_app.sh
           test -f "dist/GravityBar.app/Contents/MacOS/GravityBar"
           test -f "dist/GravityBar.app/Contents/Info.plist"
+          codesign --verify --strict --verbose=2 "dist/GravityBar.app"
 
