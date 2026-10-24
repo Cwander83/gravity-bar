@@ -34,6 +34,7 @@ public enum QuotaThreshold: String, Codable, CaseIterable, Comparable {
 public enum WindowType: String, Codable, CaseIterable {
     case fiveHour = "5-Hour Window"
     case weekly = "Weekly Window"
+    case monthly = "Monthly Window"
 }
 
 /// Supported AI providers in GravityBar.
@@ -163,6 +164,16 @@ public struct TokenUsage: Codable, Equatable {
         )
     }
 
+    /// Difference of cumulative counters, clamped at 0 per field.
+    public static func - (lhs: TokenUsage, rhs: TokenUsage) -> TokenUsage {
+        TokenUsage(
+            inputTokens: max(0, lhs.inputTokens - rhs.inputTokens),
+            outputTokens: max(0, lhs.outputTokens - rhs.outputTokens),
+            cacheReadTokens: max(0, lhs.cacheReadTokens - rhs.cacheReadTokens),
+            cacheCreationTokens: max(0, lhs.cacheCreationTokens - rhs.cacheCreationTokens)
+        )
+    }
+
     /// Readout like "1.2M in • 340K out • 8.1M cache".
     public var summary: String {
         "\(TokenUsage.compact(inputTokens)) in • \(TokenUsage.compact(outputTokens)) out • \(TokenUsage.compact(cacheTokens)) cache"
@@ -185,7 +196,7 @@ public struct TokenUsage: Codable, Equatable {
     }
 }
 
-/// Claude Code CLI token usage over rolling spans ending now.
+/// CLI token usage (Claude Code, Codex) over rolling spans ending now.
 public struct CLITokenUsage: Codable, Equatable {
     public var last5h: TokenUsage
     public var last7d: TokenUsage
@@ -205,7 +216,7 @@ public struct ProviderUsage: Identifiable, Codable, Equatable {
     public var weeklyMetric: UsageMetric
     /// Per-group breakdown; empty for providers that expose a single quota.
     public var groups: [QuotaGroup]
-    /// Claude Code CLI token usage; nil for other providers or when no recent transcripts exist.
+    /// CLI token usage (Claude Code, Codex); nil when the provider has no CLI or no recent usage.
     public var cliTokenUsage: CLITokenUsage?
 
     public init(

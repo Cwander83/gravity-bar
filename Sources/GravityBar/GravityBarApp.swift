@@ -210,6 +210,35 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         assert(TokenUsage.compact(342_000) == "342K" && TokenUsage.compact(1_000) == "1K" && TokenUsage.compact(2_000_000_000) == "2B")
         print("✓ Claude Code CLI token aggregation tests passed")
 
+        // 3f. Codex rollout token_count parsing (CHR-59)
+        func codexEvent(minutesAgo: Double, windows: String, input: Int, cached: Int, output: Int, plan: String = "plus") -> String {
+            let stamp = ISO8601DateFormatter().string(from: now.addingTimeInterval(-minutesAgo * 60))
+            return "{\"timestamp\":\"\(stamp)\",\"type\":\"event_msg\",\"payload\":{\"type\":\"token_count\",\"info\":{\"total_token_usage\":{\"input_tokens\":\(input),\"cached_input_tokens\":\(cached),\"cache_write_input_tokens\":0,\"output_tokens\":\(output),\"reasoning_output_tokens\":0,\"total_tokens\":\(input + output)}},\"rate_limits\":{\"limit_id\":\"codex\",\(windows),\"plan_type\":\"\(plan)\"}}}"
+        }
+        let inOneDay = Int(now.addingTimeInterval(86400).timeIntervalSince1970)
+        let inTwoHours = Int(now.addingTimeInterval(7200).timeIntervalSince1970)
+        let anHourAgo = Int(now.addingTimeInterval(-3600).timeIntervalSince1970)
+        let sessionA = Data([
+            codexEvent(minutesAgo: 8 * 60, windows: "\"primary\":{\"used_percent\":40.0,\"window_minutes\":10080,\"resets_at\":\(inOneDay)},\"secondary\":null", input: 1_000, cached: 600, output: 100),
+            codexEvent(minutesAgo: 60, windows: "\"primary\":{\"used_percent\":13.0,\"window_minutes\":10080,\"resets_at\":\(inOneDay)},\"secondary\":{\"used_percent\":55.0,\"window_minutes\":300,\"resets_at\":\(inTwoHours)}", input: 3_000, cached: 2_000, output: 400)
+        ].joined(separator: "\n").utf8)
+        // Newer event from a local (Ollama) session carries no windows and must not wipe the rate limits
+        let sessionB = Data(codexEvent(minutesAgo: 5, windows: "\"primary\":null,\"secondary\":null", input: 50, cached: 0, output: 5).utf8)
+        let codexEvents = CodexRolloutScanner.parseEvents(from: sessionA, session: "a") + CodexRolloutScanner.parseEvents(from: sessionB, session: "b")
+        let codexUsage = CodexProvider.makeUsage(events: codexEvents, now: now)
+        assert(codexUsage.fiveHourMetric.usedPercent == 55 && codexUsage.weeklyMetric.usedPercent == 13)
+        assert(codexUsage.weeklyMetric.windowType == .weekly && codexUsage.groups.first?.name == "Codex · Plus plan")
+        // 5h: session A grew 3000-1000 input (incl. cached 2000-600) since the 8h-old baseline; session B is new
+        assert(codexUsage.cliTokenUsage?.last5h == TokenUsage(inputTokens: 600 + 50, outputTokens: 300 + 5, cacheReadTokens: 1_400, cacheCreationTokens: 0))
+        assert(codexUsage.cliTokenUsage?.last7d == TokenUsage(inputTokens: 1_000 + 50, outputTokens: 400 + 5, cacheReadTokens: 2_000, cacheCreationTokens: 0))
+
+        // Expired window resets to 0% and rolls forward; 43200-minute windows are monthly
+        let expired = CodexRolloutScanner.Window(usedPercent: 80, windowMinutes: 300, resetsAt: Date(timeIntervalSince1970: TimeInterval(anHourAgo)))
+        assert(expired.metric(now: now).usedPercent == 0 && abs(expired.metric(now: now).resetDate.timeIntervalSince(now) - 4 * 3600) < 2)
+        assert(CodexRolloutScanner.Window(usedPercent: 1, windowMinutes: 43200, resetsAt: now).windowType == .monthly)
+        assert(CodexProvider.makeUsage(events: [], now: now).groups.isEmpty)
+        print("✓ Codex rollout parsing tests passed")
+
         // 4. Claude Real Data Provider Test
         let claudeProv = ClaudeProvider()
         if let u = try? await claudeProv.fetchUsage() {
@@ -222,13 +251,25 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
         }
 
+        // 4b. Codex Real Data Provider Test
+        if let u = try? await CodexProvider().fetchUsage() {
+            assert(u.provider == .codex)
+            print("✓ Codex real data provider parsed: 5h=\(Int(u.fiveHourMetric.usedPercent))% used, long window=\(Int(u.weeklyMetric.usedPercent))% used")
+            for group in u.groups {
+                print("    • \(group.name): " + group.metrics.map { "\($0.windowType.rawValue)=\($0.usageSummary), \($0.formattedReset())" }.joined(separator: "; "))
+            }
+            if let cli = u.cliTokenUsage {
+                print("    • Codex CLI last 7d: \(cli.last7d.summary)")
+            }
+        }
+
         // 5. Antigravity Real Data Provider Test
         let geminiProv = AntigravityProvider()
         if let u = try? await geminiProv.fetchUsage() {
             assert(u.provider == .gemini)
             print("✓ Antigravity real data provider parsed: 5h=\(Int(u.fiveHourMetric.usedPercent))% used, weekly=\(Int(u.weeklyMetric.usedPercent))% used")
             for group in u.groups {
-                print("    • \(group.name): " + group.metrics.map { "\($0.windowType == .fiveHour ? "5h" : "weekly")=\($0.usageSummary)" }.joined(separator: ", "))
+                print("    • \(group.name): " + group.metrics.map { "\($0.windowType.rawValue)=\($0.usageSummary)" }.joined(separator: ", "))
             }
         }
 

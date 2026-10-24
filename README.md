@@ -17,7 +17,7 @@
   - Reset countdowns (e.g. `78% used • Resets in 1h 42m`).
 - **Provider Support**:
   1. **Claude**: 5-hour rolling window + weekly window (percentages and reset countdowns).
-  2. **Codex**: 5-hour rolling window + weekly window (percentages and reset countdowns).
+  2. **Codex**: rate-limit windows reported by the Codex CLI (5-hour / weekly / monthly, depending on plan) with reset countdowns and token usage.
   3. **Antigravity / Gemini**: 5-hour rolling window + weekly window (percentages and reset countdowns).
   4. **Mock Provider**: Zero-config mock dataset for offline design iteration and testing.
 - **Preferences & Configuration**:
@@ -102,7 +102,7 @@ To connect live accounts:
 3. Enable or disable providers (customize for work Mac with Codex or personal Mac with Claude/Gemini).
 4. Specify paths to local state/session files:
    - **Claude**: `~/Library/Application Support/Claude/plan-usage-history.json` (Claude Desktop plan usage). Claude Code CLI token usage is read automatically from `~/.claude/projects/**/*.jsonl`.
-   - **Codex**: `~/.codex/session.json`
+   - **Codex**: `~/.codex/sessions` (Codex CLI rollout logs; rate-limit windows and token counts come from `token_count` events)
    - **Gemini**: `~/.gemini/antigravity-ide/metrics.json`
 5. Click **Apply & Close**. If local files are not yet present, GravityBar gracefully falls back to synthetic mock values without crashing.
 

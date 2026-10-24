@@ -86,7 +86,13 @@ public final class UsageManager: ObservableObject {
         } else {
             self.claudePath = claudeDefaultPath
         }
-        self.codexPath = defaults.string(forKey: "GravityBar_codexPath") ?? "~/.codex/session.json"
+        let codexDefaultPath = "~/.codex/sessions"
+        // Earlier builds defaulted to ~/.codex/session.json, which Codex never writes; migrate it to the rollout logs
+        if let saved = defaults.string(forKey: "GravityBar_codexPath"), saved != "~/.codex/session.json" {
+            self.codexPath = saved
+        } else {
+            self.codexPath = codexDefaultPath
+        }
         self.geminiPath = defaults.string(forKey: "GravityBar_geminiPath") ?? "~/.gemini/antigravity-ide/metrics.json"
 
 
