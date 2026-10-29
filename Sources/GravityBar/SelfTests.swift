@@ -299,6 +299,44 @@ enum SelfTests {
         await providerFixtureChecks(now: now)
         print("✓ Provider fixture, malformed input and TLS scope tests passed")
 
+        // 3k. URLSession reuse and provider caching (GRBA-1)
+        check(AntigravityProvider.sharedSession.delegate === AntigravityProvider.sharedDelegate, "AntigravityProvider must reuse shared delegate")
+        check(AntigravityProvider.sharedSession.configuration.timeoutIntervalForRequest == 1.5, "AntigravityProvider session timeout must be 1.5s")
+        check(OllamaProvider.sharedSession.configuration.timeoutIntervalForRequest == 1.5, "OllamaProvider session timeout must be 1.5s")
+
+        let delegateCountBefore = LocalhostTrustDelegate.instanceCount
+        check(delegateCountBefore > 0, "LocalhostTrustDelegate should be initialized with shared delegate")
+        _ = try? await AntigravityProvider().fetchUsage()
+        _ = try? await AntigravityProvider().fetchUsage()
+        _ = try? await AntigravityProvider().fetchUsage()
+        check(LocalhostTrustDelegate.instanceCount == delegateCountBefore, "LocalhostTrustDelegate must not leak across polling cycles")
+
+        let testManager = UsageManager(startPollingImmediately: false)
+        let initialClaude = testManager.providers[.claude]
+        let initialCodex = testManager.providers[.codex]
+        let initialGemini = testManager.providers[.gemini]
+        let initialOllama = testManager.providers[.ollama]
+        check(initialClaude != nil && initialCodex != nil && initialGemini != nil && initialOllama != nil, "UsageManager must initialize all providers")
+
+        testManager.setupProvidersIfNeeded()
+        check(testManager.providers[.claude] === initialClaude as AnyObject, "UsageManager must not recreate providers when config unchanged")
+        check(testManager.providers[.gemini] === initialGemini as AnyObject, "UsageManager must not recreate AntigravityProvider when config unchanged")
+
+        let savedClaudeDefault = UserDefaults.standard.object(forKey: "GravityBar_claudePath")
+        defer {
+            if let saved = savedClaudeDefault {
+                UserDefaults.standard.set(saved, forKey: "GravityBar_claudePath")
+            } else {
+                UserDefaults.standard.removeObject(forKey: "GravityBar_claudePath")
+            }
+        }
+        testManager.claudePath = "/tmp/test-claude-path"
+        check(testManager.providers[.claude] !== initialClaude as AnyObject, "UsageManager must recreate ClaudeProvider when path changes")
+        if let saved = savedClaudeDefault as? String {
+            testManager.claudePath = saved
+        }
+        print("✓ URLSession reuse and provider caching tests passed")
+
         // MARK: Live machine smoke output (informational)
         // Reads whatever is installed on this Mac. Nothing here can fail the run: on CI these sources are
         // absent, and the deterministic fixture checks above are what gate the build.

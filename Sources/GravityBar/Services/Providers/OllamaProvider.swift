@@ -16,12 +16,16 @@ public final class OllamaProvider: UsageProvider {
         self.codexLaunchConfigPath = codexLaunchConfigPath
     }
 
-    public func fetchUsage() async throws -> ProviderUsage {
-        let configuredModel = OllamaProvider.configuredModel(atPath: codexLaunchConfigPath)
-
+    /// Shared ephemeral session reused across polling cycles to avoid URLSession and connection pool leaks.
+    static let sharedSession: URLSession = {
         let sessionConfig = URLSessionConfiguration.ephemeral
         sessionConfig.timeoutIntervalForRequest = 1.5
-        let session = URLSession(configuration: sessionConfig)
+        return URLSession(configuration: sessionConfig)
+    }()
+
+    public func fetchUsage() async throws -> ProviderUsage {
+        let configuredModel = OllamaProvider.configuredModel(atPath: codexLaunchConfigPath)
+        let session = OllamaProvider.sharedSession
 
         // data(from:) doesn't throw on 4xx/5xx, so require a 200 before treating Ollama as connected
         guard let (tagsData, tagsResponse) = try? await session.data(from: baseURL.appendingPathComponent("api/tags")),

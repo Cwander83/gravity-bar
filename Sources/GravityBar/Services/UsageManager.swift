@@ -16,6 +16,7 @@ public final class UsageManager: ObservableObject {
     @Published public var isMockMode: Bool {
         didSet {
             UserDefaults.standard.set(isMockMode, forKey: "GravityBar_isMockMode")
+            setupProvidersIfNeeded()
             Task { await refreshAll() }
         }
     }
@@ -43,18 +44,21 @@ public final class UsageManager: ObservableObject {
     @Published public var claudePath: String {
         didSet {
             UserDefaults.standard.set(claudePath, forKey: "GravityBar_claudePath")
+            setupProvidersIfNeeded()
         }
     }
 
     @Published public var codexPath: String {
         didSet {
             UserDefaults.standard.set(codexPath, forKey: "GravityBar_codexPath")
+            setupProvidersIfNeeded()
         }
     }
 
     @Published public var geminiPath: String {
         didSet {
             UserDefaults.standard.set(geminiPath, forKey: "GravityBar_geminiPath")
+            setupProvidersIfNeeded()
         }
     }
 
@@ -67,9 +71,14 @@ public final class UsageManager: ObservableObject {
     private var pollingTimer: Timer?
     private var countdownTimer: Timer?
 
-    private var providers: [ProviderType: UsageProvider] = [:]
+    private var lastConfiguredMockMode: Bool?
+    private var lastConfiguredClaudePath: String?
+    private var lastConfiguredCodexPath: String?
+    private var lastConfiguredGeminiPath: String?
 
-    public init() {
+    internal private(set) var providers: [ProviderType: UsageProvider] = [:]
+
+    public init(startPollingImmediately: Bool = true) {
         // Load persisted settings or fallback to defaults
         let defaults = UserDefaults.standard
 
@@ -108,16 +117,34 @@ public final class UsageManager: ObservableObject {
         self.geminiPath = defaults.string(forKey: "GravityBar_geminiPath") ?? ProviderPaths.geminiDefault
 
 
-        setupProviders()
-        startPolling()
-        startCountdownTimer()
+        setupProvidersIfNeeded()
+        if startPollingImmediately {
+            startPolling()
+            startCountdownTimer()
 
-        Task {
-            await refreshAll()
+            Task {
+                await refreshAll()
+            }
         }
     }
 
+    func setupProvidersIfNeeded() {
+        guard providers.isEmpty ||
+            lastConfiguredMockMode != isMockMode ||
+            lastConfiguredClaudePath != claudePath ||
+            lastConfiguredCodexPath != codexPath ||
+            lastConfiguredGeminiPath != geminiPath else {
+            return
+        }
+        setupProviders()
+    }
+
     private func setupProviders() {
+        lastConfiguredMockMode = isMockMode
+        lastConfiguredClaudePath = claudePath
+        lastConfiguredCodexPath = codexPath
+        lastConfiguredGeminiPath = geminiPath
+
         if isMockMode {
             providers = [
                 .claude: MockProvider(providerType: .claude),
@@ -137,7 +164,7 @@ public final class UsageManager: ObservableObject {
 
     public func refreshAll() async {
         isRefreshing = true
-        setupProviders()
+        setupProvidersIfNeeded()
 
         // Fetch all enabled providers in parallel. fetchUsage is nonisolated async, so child tasks run off the
         // main actor; only the result assignment below happens on it.
