@@ -119,7 +119,10 @@ enum SelfTests {
         check(forward.map { $0.name } == backward.map { $0.name })
         check(forward.map { $0.name } == AntigravityProvider.groupDisplayOrder + ["Aardvark Models"])
 
-        // Protobuf JSON timestamps may include fractional seconds
+        // Protobuf JSON timestamps may include fractional seconds (GRBA-5: static formatters)
+        check(AntigravityProvider.fractionalFormatter.formatOptions.contains(.withFractionalSeconds))
+        check(!AntigravityProvider.wholeSecondFormatter.formatOptions.contains(.withFractionalSeconds))
+        check(AntigravityProvider.parseResetTime("invalid-date") == nil)
         let fractionalReset = AntigravityProvider.parseResetTime("2026-10-24T03:42:18.491Z")
         let wholeReset = AntigravityProvider.parseResetTime("2026-10-24T03:42:18Z")
         check(fractionalReset != nil && wholeReset != nil)

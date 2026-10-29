@@ -270,15 +270,27 @@ public final class AntigravityProvider: UsageProvider {
         }
     }
 
+    // MARK: - Date Formatting
+
+    private static let formatterLock = NSLock()
+
+    static let fractionalFormatter: ISO8601DateFormatter = {
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        return formatter
+    }()
+
+    static let wholeSecondFormatter: ISO8601DateFormatter = {
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime]
+        return formatter
+    }()
+
     /// Parses protobuf-JSON timestamps, which may or may not carry fractional seconds (e.g. "2026-10-24T03:42:18.491Z").
     static func parseResetTime(_ string: String) -> Date? {
-        let fractional = ISO8601DateFormatter()
-        fractional.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-        if let date = fractional.date(from: string) { return date }
-
-        let whole = ISO8601DateFormatter()
-        whole.formatOptions = [.withInternetDateTime]
-        return whole.date(from: string)
+        formatterLock.withLock {
+            fractionalFormatter.date(from: string) ?? wholeSecondFormatter.date(from: string)
+        }
     }
 
     /// Display order for known groups; unknown groups follow alphabetically.
