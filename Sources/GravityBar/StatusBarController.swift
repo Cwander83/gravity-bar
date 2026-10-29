@@ -5,8 +5,11 @@ import Combine
 /// Controller managing NSStatusItem, tracking area hover events, and NSPopover presentation.
 @MainActor
 public final class StatusBarController: NSObject, NSPopoverDelegate {
-    private var statusItem: NSStatusItem!
-    private var popover: NSPopover!
+    internal private(set) var statusItem: NSStatusItem!
+    internal private(set) var popover: NSPopover!
+    internal private(set) var hoverView: HoverTrackingView?
+    internal var lastHoverOpenTime: Date?
+    public static let hoverClickGracePeriod: TimeInterval = 0.4
     private var eventMonitor: Any?
     private var cancellables = Set<AnyCancellable>()
     private var manager: UsageManager
@@ -32,15 +35,17 @@ public final class StatusBarController: NSObject, NSPopoverDelegate {
         button.sendAction(on: [.leftMouseUp, .rightMouseUp])
 
         // Add hover tracking overlay for hover-to-open feature
-        let hoverView = HoverTrackingView(frame: button.bounds)
-        hoverView.autoresizingMask = [.width, .height]
-        hoverView.onHover = { [weak self] in
+        let hView = HoverTrackingView(frame: button.bounds)
+        hView.autoresizingMask = [.width, .height]
+        hView.onHover = { [weak self] in
             guard let self = self, self.manager.hoverToOpen else { return }
-            if !self.popover.isShown, let btn = self.statusItem.button {
+            if !self.manager.isPopoverOpen, let btn = self.statusItem.button {
+                self.lastHoverOpenTime = Date()
                 self.showPopover(btn)
             }
         }
-        button.addSubview(hoverView)
+        button.addSubview(hView)
+        self.hoverView = hView
 
         updateButtonUI()
     }
@@ -104,22 +109,30 @@ public final class StatusBarController: NSObject, NSPopoverDelegate {
 
     // MARK: - Actions & Events
 
-    @objc private func statusItemClicked(_ sender: NSStatusBarButton) {
+    @objc func statusItemClicked(_ sender: NSStatusBarButton) {
+        hoverView?.cancelPendingHover()
+
         if NSApp.currentEvent?.type == .rightMouseUp {
             showContextMenu()
             return
         }
 
-        if popover.isShown {
+        if manager.isPopoverOpen {
+            if let lastHover = lastHoverOpenTime, Date().timeIntervalSince(lastHover) < StatusBarController.hoverClickGracePeriod {
+                // Clicking right after a hover-open confirms the user wanted it open; do not toggle-close
+                return
+            }
             closePopover(sender)
         } else {
+            lastHoverOpenTime = nil
             showPopover(sender)
         }
     }
 
     /// Right-click menu with quick actions. Assigned only while open so left-click keeps toggling the popover.
-    private func showContextMenu() {
-        if popover.isShown {
+    func showContextMenu(popUpMenu: Bool = true) {
+        hoverView?.cancelPendingHover()
+        if manager.isPopoverOpen {
             closePopover(nil)
         }
 
@@ -129,6 +142,7 @@ public final class StatusBarController: NSObject, NSPopoverDelegate {
         menu.addItem(.separator())
         menu.addItem(withTitle: "Quit GravityBar", action: #selector(quitApp), keyEquivalent: "q").target = self
 
+        guard popUpMenu else { return }
         statusItem.menu = menu
         statusItem.button?.performClick(nil)
         statusItem.menu = nil
@@ -156,7 +170,10 @@ public final class StatusBarController: NSObject, NSPopoverDelegate {
     }
 
     public func closePopover(_ sender: AnyObject?) {
+        lastHoverOpenTime = nil
+        hoverView?.cancelPendingHover()
         popover.performClose(sender)
+        popover.close()
         manager.isPopoverOpen = false
         stopEventMonitor()
         if manager.showingSettings {
@@ -169,7 +186,7 @@ public final class StatusBarController: NSObject, NSPopoverDelegate {
         eventMonitor = NSEvent.addGlobalMonitorForEvents(
             matching: [.leftMouseDown, .rightMouseDown]
         ) { [weak self] event in
-            guard let self = self, self.popover.isShown else { return }
+            guard let self = self, self.manager.isPopoverOpen else { return }
             self.closePopover(event)
         }
     }
@@ -188,6 +205,7 @@ public final class StatusBarController: NSObject, NSPopoverDelegate {
     }
 
     public func popoverDidClose(_ notification: Notification) {
+        lastHoverOpenTime = nil
         manager.isPopoverOpen = false
         stopEventMonitor()
         if manager.showingSettings {
@@ -210,7 +228,12 @@ final class HoverTrackingView: NSView {
     var onHover: (() -> Void)?
     /// The cursor must rest on the item this long, so passing through to Control Center doesn't open it.
     static let dwellDelay: TimeInterval = 0.2
-    private var pendingHover: DispatchWorkItem?
+    private(set) var pendingHover: DispatchWorkItem?
+
+    func cancelPendingHover() {
+        pendingHover?.cancel()
+        pendingHover = nil
+    }
 
     override func updateTrackingAreas() {
         super.updateTrackingAreas()
@@ -224,18 +247,48 @@ final class HoverTrackingView: NSView {
         addTrackingArea(area)
     }
 
-    override func mouseEntered(with event: NSEvent) {
-        super.mouseEntered(with: event)
-        pendingHover?.cancel()
+    func handleMouseEnter() {
+        cancelPendingHover()
         let work = DispatchWorkItem { [weak self] in self?.onHover?() }
         pendingHover = work
         DispatchQueue.main.asyncAfter(deadline: .now() + HoverTrackingView.dwellDelay, execute: work)
     }
 
+    override func mouseEntered(with event: NSEvent) {
+        super.mouseEntered(with: event)
+        handleMouseEnter()
+    }
+
+    func handleMouseExit() {
+        cancelPendingHover()
+    }
+
     override func mouseExited(with event: NSEvent) {
         super.mouseExited(with: event)
-        pendingHover?.cancel()
-        pendingHover = nil
+        handleMouseExit()
+    }
+
+    func handleMouseDown() {
+        cancelPendingHover()
+    }
+
+    override func mouseDown(with event: NSEvent) {
+        handleMouseDown()
+        super.mouseDown(with: event)
+    }
+
+    func handleRightMouseDown() {
+        cancelPendingHover()
+    }
+
+    override func rightMouseDown(with event: NSEvent) {
+        handleRightMouseDown()
+        super.rightMouseDown(with: event)
+    }
+
+    override func otherMouseDown(with event: NSEvent) {
+        cancelPendingHover()
+        super.otherMouseDown(with: event)
     }
 }
 

@@ -441,6 +441,63 @@ enum SelfTests {
         _ = UsageMetricRowView(usage: sampleUsage).environment(\.colorScheme, .dark)
         print("✓ Adaptive design tokens and light/dark appearance tests passed")
 
+        // 3q. Hover-to-open cancellation on click and click race protection (GRBA-9)
+        guard let hView = controller.hoverView else {
+            preconditionFailure("StatusBarController must instantiate HoverTrackingView")
+        }
+
+        // Test c1: Mouse enter schedules pendingHover; mouseDown cancels it
+        hView.handleMouseEnter()
+        check(hView.pendingHover != nil, "handleMouseEnter must schedule pendingHover")
+        hView.handleMouseDown()
+        check(hView.pendingHover == nil, "mouseDown must cancel pendingHover")
+
+        // Test c1: Mouse enter schedules pendingHover; rightMouseDown cancels it
+        hView.handleMouseEnter()
+        check(hView.pendingHover != nil, "handleMouseEnter must schedule pendingHover")
+        hView.handleRightMouseDown()
+        check(hView.pendingHover == nil, "rightMouseDown must cancel pendingHover")
+
+        // Test c1: Mouse enter schedules pendingHover; mouseExit cancels it
+        hView.handleMouseEnter()
+        check(hView.pendingHover != nil, "handleMouseEnter must schedule pendingHover")
+        hView.handleMouseExit()
+        check(hView.pendingHover == nil, "mouseExit must cancel pendingHover")
+
+        // Test c1: showContextMenu cancels pendingHover
+        hView.handleMouseEnter()
+        check(hView.pendingHover != nil, "handleMouseEnter must schedule pendingHover")
+        controller.showContextMenu(popUpMenu: false)
+        check(hView.pendingHover == nil, "showContextMenu must cancel pendingHover")
+
+        // Test c2: Hover-open records lastHoverOpenTime; immediate left-click is ignored (kept open)
+        controller.closePopover(nil)
+        check(!testManager.isPopoverOpen)
+
+        // Simulate hover open
+        controller.showPopover(nil)
+        controller.lastHoverOpenTime = Date()
+        check(testManager.isPopoverOpen)
+
+        // Immediate left-click (within 0.4s) must NOT close the popover
+        if let btn = controller.statusItem.button {
+            controller.statusItemClicked(btn)
+            check(testManager.isPopoverOpen, "Left-click within 400ms of hover-open must keep popover open")
+
+            // Left-click after grace period (>0.4s) closes the popover
+            controller.lastHoverOpenTime = Date().addingTimeInterval(-1.0)
+            controller.statusItemClicked(btn)
+            check(!testManager.isPopoverOpen, "Left-click after grace period must close popover")
+
+            // Normal click-open (not hover) can be closed immediately by another click
+            controller.statusItemClicked(btn)
+            check(testManager.isPopoverOpen, "Click should open popover")
+            check(controller.lastHoverOpenTime == nil, "Click-open must not set lastHoverOpenTime")
+            controller.statusItemClicked(btn)
+            check(!testManager.isPopoverOpen, "Immediate click after click-open must close popover")
+        }
+        print("✓ Hover cancellation and click race protection tests passed")
+
         // MARK: Live machine smoke output (informational)
         // Reads whatever is installed on this Mac. Nothing here can fail the run: on CI these sources are
         // absent, and the deterministic fixture checks above are what gate the build.
