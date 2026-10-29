@@ -127,6 +127,18 @@ enum ClaudeCodeUsageScanner {
     /// Parsed entries per file, reused while the file's modification date is unchanged.
     private static var cache: [String: (modified: Date, entries: [Entry])] = [:]
 
+    static func clearCache() {
+        lock.lock()
+        defer { lock.unlock() }
+        cache.removeAll()
+    }
+
+    static var cachedCount: Int {
+        lock.lock()
+        defer { lock.unlock() }
+        return cache.count
+    }
+
     /// Returns nil when there is no CLI token usage in the last 7 days (e.g. CLI not installed or idle).
     static func scan(projectsPath: String, now: Date = Date()) -> CLITokenUsage? {
         let root = URL(fileURLWithPath: (projectsPath as NSString).expandingTildeInPath)
@@ -137,10 +149,14 @@ enum ClaudeCodeUsageScanner {
             includingPropertiesForKeys: [.contentModificationDateKey, .isRegularFileKey],
             options: [.skipsHiddenFiles]
         ) else {
+            lock.lock()
+            defer { lock.unlock() }
+            cache.removeAll()
             return nil
         }
 
         var entries: [Entry] = []
+        var activePaths = Set<String>()
         lock.lock()
         defer { lock.unlock() }
 
@@ -152,6 +168,7 @@ enum ClaudeCodeUsageScanner {
                 continue
             }
 
+            activePaths.insert(url.path)
             if let cached = cache[url.path], cached.modified == modified {
                 entries.append(contentsOf: cached.entries)
             } else if let data = try? Data(contentsOf: url) {
@@ -160,6 +177,8 @@ enum ClaudeCodeUsageScanner {
                 entries.append(contentsOf: parsed)
             }
         }
+
+        cache = cache.filter { activePaths.contains($0.key) }
 
         // Old transcripts get touched by background indexing/cleanup, so a recent mtime alone does not
         // mean recent usage. No tokens in the last 7 days means nothing to show.
