@@ -492,21 +492,29 @@ enum SelfTests {
         CodexRolloutScanner.clearCache()
         let veryOldModified = now.addingTimeInterval(-30 * 86400)
         let latestOldModified = now.addingTimeInterval(-10 * 86400)
+        let futureWeeklyReset = Int(now.addingTimeInterval(4 * 86400).timeIntervalSince1970)
         write("""
         {"timestamp":"\(iso(minutesAgo: 30 * 1440))","type":"event_msg","payload":{"type":"token_count","info":{"total_token_usage":{"input_tokens":200,"cached_input_tokens":0,"cache_write_input_tokens":0,"output_tokens":20,"reasoning_output_tokens":0,"total_tokens":220}},"rate_limits":{"limit_id":"codex","primary":{"used_percent":5.0,"window_minutes":10080,"resets_at":\(Int(veryOldModified.timeIntervalSince1970))},"secondary":null,"plan_type":"plus"}}}
         """, to: "codex-idle/sessions/2026/09/29/rollout-very-old.jsonl", modified: veryOldModified)
         write("""
-        {"timestamp":"\(iso(minutesAgo: 10 * 1440))","type":"event_msg","payload":{"type":"token_count","info":{"total_token_usage":{"input_tokens":300,"cached_input_tokens":0,"cache_write_input_tokens":0,"output_tokens":30,"reasoning_output_tokens":0,"total_tokens":330}},"rate_limits":{"limit_id":"codex","primary":{"used_percent":15.0,"window_minutes":10080,"resets_at":\(Int(latestOldModified.timeIntervalSince1970))},"secondary":null,"plan_type":"plus"}}}
+        {"timestamp":"\(iso(minutesAgo: 10 * 1440))","type":"event_msg","payload":{"type":"token_count","info":{"total_token_usage":{"input_tokens":300,"cached_input_tokens":0,"cache_write_input_tokens":0,"output_tokens":30,"reasoning_output_tokens":0,"total_tokens":330}},"rate_limits":{"limit_id":"codex","primary":{"used_percent":15.0,"window_minutes":10080,"resets_at":\(futureWeeklyReset)},"secondary":null,"plan_type":"plus"}}}
         """, to: "codex-idle/sessions/2026/10/19/rollout-latest-old.jsonl", modified: latestOldModified)
 
         let idleEvents = CodexRolloutScanner.scan(path: root.appendingPathComponent("codex-idle/sessions").path, now: now)
         check(idleEvents.contains { $0.session.contains("rollout-latest-old.jsonl") }, "Latest old rollout file must be parsed as fallback")
         check(!idleEvents.contains { $0.session.contains("rollout-very-old.jsonl") }, "Older rollout files beyond the latest must be skipped")
 
-        let idleCodex = try? await CodexProvider(customStatePath: root.appendingPathComponent("codex-idle/sessions").path).fetchUsage()
-        if case .idleCached = idleCodex?.connectionState {} else {
+        // Deterministic check without live machine app state
+        let idleUsage = CodexProvider.makeUsage(events: idleEvents, chatGPTApp: nil, now: now)
+        if case let .idleCached(lastSeen) = idleUsage.connectionState {
+            check(abs(lastSeen.timeIntervalSince(now.addingTimeInterval(-10 * 86400))) < 5, "lastSeen must equal latest-old event timestamp")
+        } else {
             check(false, "Codex idle >7d must report connectionState .idleCached")
         }
+        check(idleUsage.weeklyMetric?.usedPercent == 15.0, "Active weekly window from fallback file must be surfaced")
+        check(idleUsage.weeklyMetric?.windowType == .weekly, "Fallback window should be weekly")
+        let resetDiff = idleUsage.weeklyMetric?.resetDate.timeIntervalSince(now) ?? 0
+        check(abs(resetDiff - 4 * 86400) < 5, "Fallback window resetDate must match future resets_at")
 
         // Malformed input never crashes and yields nothing
         let garbage = Data("{not json\n\u{0}\u{1}".utf8)

@@ -173,6 +173,11 @@ enum CodexRolloutScanner {
         lock.lock()
         defer { lock.unlock() }
 
+        if isDirectory.boolValue {
+            let activePaths = Set(filesToParse.map { $0.url.path })
+            cache = cache.filter { activePaths.contains($0.key) }
+        }
+
         var events: [Event] = []
         for (file, modified) in filesToParse {
             if let cached = cache[file.path], cached.modified == modified {
