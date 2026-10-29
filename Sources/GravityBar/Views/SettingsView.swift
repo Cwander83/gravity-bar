@@ -5,12 +5,31 @@ import SwiftUI
 public struct SettingsView: View {
     @ObservedObject var manager: UsageManager
 
+    let initialClaudePath: String
+    let initialCodexPath: String
+    let initialGeminiPath: String
+    let initialEnabledProviders: Set<ProviderType>
+    let initialShowOffline: Bool
+
     public init(manager: UsageManager) {
         self.manager = manager
+        self.initialClaudePath = manager.claudePath
+        self.initialCodexPath = manager.codexPath
+        self.initialGeminiPath = manager.geminiPath
+        self.initialEnabledProviders = manager.enabledProviders
+        self.initialShowOffline = manager.showOfflineProviders
     }
 
     public init() {
-        self.manager = .shared
+        self.init(manager: .shared)
+    }
+
+    public var hasModifiedSettings: Bool {
+        manager.claudePath != initialClaudePath ||
+        manager.codexPath != initialCodexPath ||
+        manager.geminiPath != initialGeminiPath ||
+        manager.enabledProviders != initialEnabledProviders ||
+        manager.showOfflineProviders != initialShowOffline
     }
 
     public var body: some View {
@@ -159,8 +178,7 @@ public struct SettingsView: View {
 
                     // Apply Button
                     Button(action: {
-                        Task { await manager.refreshAll() }
-                        dismiss()
+                        dismiss(forceRefresh: true)
                     }) {
                         Text("Apply & Close")
                             .font(.system(size: 12, weight: .semibold))
@@ -189,8 +207,9 @@ public struct SettingsView: View {
     }
 
     /// Returns to the readout inside the popover.
-    private func dismiss() {
-        manager.showingSettings = false
+    public func dismiss(forceRefresh: Bool = false) {
+        let changed = hasModifiedSettings
+        manager.dismissSettings(forceRefresh: forceRefresh || changed)
     }
 
     private func providerToggleRow(title: String, subtitle: String, isEnabled: Bool, onToggle: @escaping () -> Void) -> some View {

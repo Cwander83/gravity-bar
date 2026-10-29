@@ -187,6 +187,9 @@ public final class StatusBarController: NSObject, NSPopoverDelegate {
     public func popoverDidClose(_ notification: Notification) {
         manager.isPopoverOpen = false
         stopEventMonitor()
+        if manager.showingSettings {
+            manager.dismissSettings()
+        }
     }
 
     deinit {

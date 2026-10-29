@@ -614,5 +614,69 @@ enum SelfTests {
         check(!LocalhostTrustDelegate.shouldTrust(host: "api.openai.com", authenticationMethod: NSURLAuthenticationMethodServerTrust))
         check(!LocalhostTrustDelegate.shouldTrust(host: "127.0.0.1.evil.com", authenticationMethod: NSURLAuthenticationMethodServerTrust))
         check(!LocalhostTrustDelegate.shouldTrust(host: "127.0.0.1", authenticationMethod: NSURLAuthenticationMethodHTTPBasic))
+
+        // 3n. Provider toggle and path updates in Settings (GRBA-6)
+        let testManager = UsageManager(startPollingImmediately: false)
+        testManager.isMockMode = true
+
+        // Initial setup with ollama disabled
+        if testManager.enabledProviders.contains(.ollama) {
+            testManager.toggleProvider(.ollama)
+        }
+        let countAfterDisable = testManager.refreshCount
+
+        // 1. Toggling on a disabled provider triggers refreshAll()
+        testManager.toggleProvider(.ollama)
+        check(testManager.enabledProviders.contains(.ollama), "toggleProvider must enable provider")
+        for _ in 0..<50 {
+            if testManager.refreshCount > countAfterDisable { break }
+            try? await Task.sleep(nanoseconds: 20_000_000)
+        }
+        check(testManager.refreshCount > countAfterDisable, "toggleProvider on must trigger refreshAll()")
+
+        // 2. SettingsView dismissal: when paths have changed, dismiss triggers refreshAll()
+        let settingsView1 = SettingsView(manager: testManager)
+        check(!settingsView1.hasModifiedSettings, "SettingsView must start with unmodified settings")
+        testManager.claudePath = "/tmp/test-claude-path-\(UUID().uuidString)"
+        check(settingsView1.hasModifiedSettings, "SettingsView must detect path modification")
+
+        let countBeforeDismiss = testManager.refreshCount
+        settingsView1.dismiss()
+        check(!testManager.showingSettings, "dismiss must close settings")
+        for _ in 0..<50 {
+            if testManager.refreshCount > countBeforeDismiss { break }
+            try? await Task.sleep(nanoseconds: 20_000_000)
+        }
+        check(testManager.refreshCount > countBeforeDismiss, "dismissing SettingsView after path modification must trigger refreshAll()")
+
+        // 3. SettingsView dismissal without changes does NOT trigger refreshAll()
+        let settingsView2 = SettingsView(manager: testManager)
+        check(!settingsView2.hasModifiedSettings)
+        let countBeforeNoop = testManager.refreshCount
+        settingsView2.dismiss()
+        try? await Task.sleep(nanoseconds: 50_000_000)
+        check(testManager.refreshCount == countBeforeNoop, "dismissing SettingsView without modifications must not trigger refreshAll()")
+
+        // 4. Apply & Close (forceRefresh) always triggers refreshAll()
+        let settingsView3 = SettingsView(manager: testManager)
+        let countBeforeApply = testManager.refreshCount
+        settingsView3.dismiss(forceRefresh: true)
+        for _ in 0..<50 {
+            if testManager.refreshCount > countBeforeApply { break }
+            try? await Task.sleep(nanoseconds: 20_000_000)
+        }
+        check(testManager.refreshCount > countBeforeApply, "Apply & Close must trigger refreshAll()")
+
+        // 5. Direct showingSettings dismissal with path modification triggers refreshAll()
+        testManager.showingSettings = true
+        testManager.codexPath = "/tmp/test-codex-path-\(UUID().uuidString)"
+        let countBeforeShowingDismiss = testManager.refreshCount
+        testManager.showingSettings = false
+        for _ in 0..<50 {
+            if testManager.refreshCount > countBeforeShowingDismiss { break }
+            try? await Task.sleep(nanoseconds: 20_000_000)
+        }
+        check(testManager.refreshCount > countBeforeShowingDismiss, "setting showingSettings = false after path modification must trigger refreshAll()")
+        print("✓ Provider toggle and Settings refresh tests passed")
     }
 }

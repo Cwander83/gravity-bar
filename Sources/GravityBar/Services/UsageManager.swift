@@ -62,7 +62,59 @@ public final class UsageManager: ObservableObject {
         }
     }
 
-    @Published public var showingSettings: Bool = false
+    private var openedClaudePath: String?
+    private var openedCodexPath: String?
+    private var openedGeminiPath: String?
+    private var openedProviders: Set<ProviderType>?
+    private var openedShowOffline: Bool?
+
+    @Published public var showingSettings: Bool = false {
+        didSet {
+            if showingSettings {
+                openedClaudePath = claudePath
+                openedCodexPath = codexPath
+                openedGeminiPath = geminiPath
+                openedProviders = enabledProviders
+                openedShowOffline = showOfflineProviders
+            } else if oldValue {
+                let pathsChanged = (openedClaudePath != nil && openedClaudePath != claudePath) ||
+                    (openedCodexPath != nil && openedCodexPath != codexPath) ||
+                    (openedGeminiPath != nil && openedGeminiPath != geminiPath)
+                let providersChanged = (openedProviders != nil && openedProviders != enabledProviders) ||
+                    (openedShowOffline != nil && openedShowOffline != showOfflineProviders)
+                if pathsChanged || providersChanged {
+                    Task { await refreshAll() }
+                }
+                openedClaudePath = nil
+                openedCodexPath = nil
+                openedGeminiPath = nil
+                openedProviders = nil
+                openedShowOffline = nil
+            }
+        }
+    }
+
+    public func dismissSettings(forceRefresh: Bool = false) {
+        let pathsChanged = (openedClaudePath != nil && openedClaudePath != claudePath) ||
+            (openedCodexPath != nil && openedCodexPath != codexPath) ||
+            (openedGeminiPath != nil && openedGeminiPath != geminiPath)
+        let providersChanged = (openedProviders != nil && openedProviders != enabledProviders) ||
+            (openedShowOffline != nil && openedShowOffline != showOfflineProviders)
+        let shouldRefresh = forceRefresh || pathsChanged || providersChanged
+
+        openedClaudePath = nil
+        openedCodexPath = nil
+        openedGeminiPath = nil
+        openedProviders = nil
+        openedShowOffline = nil
+
+        showingSettings = false
+
+        if shouldRefresh {
+            Task { await refreshAll() }
+        }
+    }
+
     @Published public var isSpinning: Bool = false
     @Published public var isPopoverOpen: Bool = false {
         didSet {
@@ -82,6 +134,7 @@ public final class UsageManager: ObservableObject {
 
     @Published public private(set) var isRefreshing: Bool = false
     @Published public private(set) var lastUpdated: Date?
+    @Published public private(set) var refreshCount: Int = 0
 
     private var pollingTimer: Timer?
     private var countdownTimer: Timer?
@@ -213,6 +266,7 @@ public final class UsageManager: ObservableObject {
         }
 
         lastUpdated = Date()
+        refreshCount += 1
         isRefreshing = false
     }
 
@@ -271,6 +325,7 @@ public final class UsageManager: ObservableObject {
             enabledProviders.remove(provider)
         } else {
             enabledProviders.insert(provider)
+            Task { await refreshAll() }
         }
     }
 
