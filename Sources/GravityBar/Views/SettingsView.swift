@@ -159,8 +159,7 @@ public struct SettingsView: View {
 
                     // Apply Button
                     Button(action: {
-                        Task { await manager.refreshAll() }
-                        dismiss()
+                        dismiss(forceRefresh: true)
                     }) {
                         Text("Apply & Close")
                             .font(.system(size: 12, weight: .semibold))
@@ -189,8 +188,8 @@ public struct SettingsView: View {
     }
 
     /// Returns to the readout inside the popover.
-    private func dismiss() {
-        manager.showingSettings = false
+    public func dismiss(forceRefresh: Bool = false) {
+        manager.dismissSettings(forceRefresh: forceRefresh)
     }
 
     private func providerToggleRow(title: String, subtitle: String, isEnabled: Bool, onToggle: @escaping () -> Void) -> some View {

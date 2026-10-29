@@ -1,4 +1,5 @@
 import Foundation
+import AppKit
 
 /// Self-tests run by `swift run GravityBar --test` (and CI). Deterministic fixture checks gate the run;
 /// the live section at the end only prints what this machine reports.
@@ -119,7 +120,10 @@ enum SelfTests {
         check(forward.map { $0.name } == backward.map { $0.name })
         check(forward.map { $0.name } == AntigravityProvider.groupDisplayOrder + ["Aardvark Models"])
 
-        // Protobuf JSON timestamps may include fractional seconds
+        // Protobuf JSON timestamps may include fractional seconds (GRBA-5: static formatters)
+        check(AntigravityProvider.fractionalFormatter.formatOptions.contains(.withFractionalSeconds))
+        check(!AntigravityProvider.wholeSecondFormatter.formatOptions.contains(.withFractionalSeconds))
+        check(AntigravityProvider.parseResetTime("invalid-date") == nil)
         let fractionalReset = AntigravityProvider.parseResetTime("2026-10-24T03:42:18.491Z")
         let wholeReset = AntigravityProvider.parseResetTime("2026-10-24T03:42:18Z")
         check(fractionalReset != nil && wholeReset != nil)
@@ -336,6 +340,85 @@ enum SelfTests {
             testManager.claudePath = saved
         }
         print("✓ URLSession reuse and provider caching tests passed")
+
+        // 3n. Idle timer and button update gating (GRBA-4)
+        check(!testManager.isPopoverOpen, "Popover should default to closed")
+        check(!testManager.isCountdownTimerRunning, "Countdown timer must not run while popover is closed")
+
+        testManager.isPopoverOpen = true
+        check(testManager.isCountdownTimerRunning, "Countdown timer must run while popover is open")
+
+        testManager.isPopoverOpen = false
+        check(!testManager.isCountdownTimerRunning, "Countdown timer must stop when popover closes")
+
+        let controller = StatusBarController(manager: testManager)
+        let initialUpdates = controller.updateCount
+        check(initialUpdates > 0, "Controller must initialize button on setup")
+
+        // Calling updateButtonUI with identical title and icon must not reconfigure or increment count
+        controller.updateButtonUI()
+        controller.updateButtonUI()
+        check(controller.updateCount == initialUpdates, "updateButtonUI must be a no-op when title and icon are unchanged")
+
+        // Triggering objectWillChange without changing state must not reconfigure button
+        testManager.objectWillChange.send()
+        await Task.yield()
+        check(controller.updateCount == initialUpdates, "objectWillChange must not trigger button reconfiguration when state is identical")
+        print("✓ Idle countdown gating and button update deduplication tests passed")
+
+        // 3o. Reset showingSettings on popover close (GRBA-7)
+        let savedGrba7Claude = UserDefaults.standard.object(forKey: "GravityBar_claudePath")
+        let savedGrba7Mock = UserDefaults.standard.object(forKey: "GravityBar_isMockMode")
+        do {
+            defer {
+                if let saved = savedGrba7Claude {
+                    UserDefaults.standard.set(saved, forKey: "GravityBar_claudePath")
+                } else {
+                    UserDefaults.standard.removeObject(forKey: "GravityBar_claudePath")
+                }
+                if let saved = savedGrba7Mock {
+                    UserDefaults.standard.set(saved, forKey: "GravityBar_isMockMode")
+                } else {
+                    UserDefaults.standard.removeObject(forKey: "GravityBar_isMockMode")
+                }
+            }
+            testManager.isMockMode = true
+
+            // Verify openPreferences opens into Settings
+            check(!testManager.showingSettings)
+            controller.openPreferences()
+            check(testManager.showingSettings, "openPreferences must set showingSettings = true")
+            check(testManager.isPopoverOpen, "openPreferences must open popover")
+
+            // Popover close without changes resets showingSettings = false
+            controller.popoverDidClose(Notification(name: NSPopover.didCloseNotification))
+            check(!testManager.showingSettings, "popoverDidClose must reset showingSettings = false")
+            check(!testManager.isPopoverOpen, "popoverDidClose must reset isPopoverOpen = false")
+
+            // Popover close with path changes resets showingSettings and triggers refresh
+            controller.openPreferences()
+            check(testManager.showingSettings)
+            testManager.claudePath = "/tmp/test-grba7-path-\(UUID().uuidString)"
+            let refreshCountBeforeClose = testManager.refreshCount
+            controller.popoverDidClose(Notification(name: NSPopover.didCloseNotification))
+            check(!testManager.showingSettings, "popoverDidClose must reset showingSettings = false")
+            for _ in 0..<50 {
+                if testManager.refreshCount > refreshCountBeforeClose { break }
+                try? await Task.sleep(nanoseconds: 20_000_000)
+            }
+            check(testManager.refreshCount > refreshCountBeforeClose, "popoverDidClose after path changes must trigger refresh")
+
+            // Also verify closePopover resets showingSettings
+            controller.openPreferences()
+            check(testManager.showingSettings)
+            controller.closePopover(nil)
+            check(!testManager.showingSettings, "closePopover must reset showingSettings = false")
+        }
+        let restoredGrba7Claude = UserDefaults.standard.object(forKey: "GravityBar_claudePath")
+        let restoredGrba7Mock = UserDefaults.standard.object(forKey: "GravityBar_isMockMode")
+        check((savedGrba7Claude == nil && restoredGrba7Claude == nil) || (savedGrba7Claude as? String == restoredGrba7Claude as? String), "UserDefaults claudePath must be restored")
+        check((savedGrba7Mock == nil && restoredGrba7Mock == nil) || (savedGrba7Mock as? Bool == restoredGrba7Mock as? Bool), "UserDefaults isMockMode must be restored")
+        print("✓ Reset showingSettings on popover close tests passed")
 
         // MARK: Live machine smoke output (informational)
         // Reads whatever is installed on this Mac. Nothing here can fail the run: on CI these sources are
@@ -586,5 +669,114 @@ enum SelfTests {
         check(!LocalhostTrustDelegate.shouldTrust(host: "api.openai.com", authenticationMethod: NSURLAuthenticationMethodServerTrust))
         check(!LocalhostTrustDelegate.shouldTrust(host: "127.0.0.1.evil.com", authenticationMethod: NSURLAuthenticationMethodServerTrust))
         check(!LocalhostTrustDelegate.shouldTrust(host: "127.0.0.1", authenticationMethod: NSURLAuthenticationMethodHTTPBasic))
+
+        // 3n. Provider toggle and path updates in Settings (GRBA-6)
+        let savedIsMockMode = UserDefaults.standard.object(forKey: "GravityBar_isMockMode")
+        let savedClaudePath = UserDefaults.standard.object(forKey: "GravityBar_claudePath")
+        let savedCodexPath = UserDefaults.standard.object(forKey: "GravityBar_codexPath")
+        let savedEnabledProviders = UserDefaults.standard.object(forKey: "GravityBar_enabledProviders")
+
+        do {
+            defer {
+                if let saved = savedIsMockMode {
+                    UserDefaults.standard.set(saved, forKey: "GravityBar_isMockMode")
+                } else {
+                    UserDefaults.standard.removeObject(forKey: "GravityBar_isMockMode")
+                }
+                if let saved = savedClaudePath {
+                    UserDefaults.standard.set(saved, forKey: "GravityBar_claudePath")
+                } else {
+                    UserDefaults.standard.removeObject(forKey: "GravityBar_claudePath")
+                }
+                if let saved = savedCodexPath {
+                    UserDefaults.standard.set(saved, forKey: "GravityBar_codexPath")
+                } else {
+                    UserDefaults.standard.removeObject(forKey: "GravityBar_codexPath")
+                }
+                if let saved = savedEnabledProviders {
+                    UserDefaults.standard.set(saved, forKey: "GravityBar_enabledProviders")
+                } else {
+                    UserDefaults.standard.removeObject(forKey: "GravityBar_enabledProviders")
+                }
+            }
+
+            let testManager = UsageManager(startPollingImmediately: false)
+            testManager.isMockMode = true
+
+            // Initial setup with ollama disabled
+            if testManager.enabledProviders.contains(.ollama) {
+                testManager.toggleProvider(.ollama)
+            }
+            let countAfterDisable = testManager.refreshCount
+
+            // 1. Toggling on a disabled provider triggers refreshAll()
+            testManager.toggleProvider(.ollama)
+            check(testManager.enabledProviders.contains(.ollama), "toggleProvider must enable provider")
+            for _ in 0..<50 {
+                if testManager.refreshCount > countAfterDisable { break }
+                try? await Task.sleep(nanoseconds: 20_000_000)
+            }
+            check(testManager.refreshCount > countAfterDisable, "toggleProvider on must trigger refreshAll()")
+
+            // 2. Settings dismissal: when paths have changed, dismissSettings triggers refreshAll()
+            testManager.showingSettings = true
+            testManager.claudePath = "/tmp/test-claude-path-\(UUID().uuidString)"
+            let countBeforeDismiss = testManager.refreshCount
+            testManager.dismissSettings()
+            check(!testManager.showingSettings, "dismissSettings must close settings")
+            for _ in 0..<50 {
+                if testManager.refreshCount > countBeforeDismiss { break }
+                try? await Task.sleep(nanoseconds: 20_000_000)
+            }
+            check(testManager.refreshCount > countBeforeDismiss, "dismissSettings after path modification must trigger refreshAll()")
+
+            // 3. Settings dismissal without changes does NOT trigger refreshAll()
+            testManager.showingSettings = true
+            let countBeforeNoop = testManager.refreshCount
+            testManager.dismissSettings()
+            check(!testManager.showingSettings, "dismissSettings without changes must close settings")
+            try? await Task.sleep(nanoseconds: 50_000_000)
+            check(testManager.refreshCount == countBeforeNoop, "dismissSettings without modifications must not trigger refreshAll()")
+
+            // 4. Apply & Close (forceRefresh) always triggers refreshAll()
+            testManager.showingSettings = true
+            let countBeforeApply = testManager.refreshCount
+            testManager.dismissSettings(forceRefresh: true)
+            check(!testManager.showingSettings, "dismissSettings with forceRefresh must close settings")
+            for _ in 0..<50 {
+                if testManager.refreshCount > countBeforeApply { break }
+                try? await Task.sleep(nanoseconds: 20_000_000)
+            }
+            check(testManager.refreshCount > countBeforeApply, "dismissSettings with forceRefresh must trigger refreshAll()")
+
+            // 5. Direct showingSettings dismissal with path modification triggers refreshAll()
+            testManager.showingSettings = true
+            testManager.codexPath = "/tmp/test-codex-path-\(UUID().uuidString)"
+            let countBeforeShowingDismiss = testManager.refreshCount
+            testManager.showingSettings = false
+            for _ in 0..<50 {
+                if testManager.refreshCount > countBeforeShowingDismiss { break }
+                try? await Task.sleep(nanoseconds: 20_000_000)
+            }
+            check(testManager.refreshCount > countBeforeShowingDismiss, "setting showingSettings = false after path modification must trigger refreshAll()")
+
+            // 6. SettingsView dismiss calls manager.dismissSettings
+            testManager.showingSettings = true
+            let settingsView = SettingsView(manager: testManager)
+            settingsView.dismiss()
+            check(!testManager.showingSettings, "SettingsView.dismiss must close settings via UsageManager")
+        }
+
+        // 7. Verify UserDefaults restored
+        let currentMock = UserDefaults.standard.object(forKey: "GravityBar_isMockMode")
+        let currentClaude = UserDefaults.standard.object(forKey: "GravityBar_claudePath")
+        let currentCodex = UserDefaults.standard.object(forKey: "GravityBar_codexPath")
+        let currentProviders = UserDefaults.standard.object(forKey: "GravityBar_enabledProviders")
+        check((savedIsMockMode == nil && currentMock == nil) || (savedIsMockMode as? Bool == currentMock as? Bool), "UserDefaults isMockMode must be restored")
+        check((savedClaudePath == nil && currentClaude == nil) || (savedClaudePath as? String == currentClaude as? String), "UserDefaults claudePath must be restored")
+        check((savedCodexPath == nil && currentCodex == nil) || (savedCodexPath as? String == currentCodex as? String), "UserDefaults codexPath must be restored")
+        check((savedEnabledProviders == nil && currentProviders == nil) || (savedEnabledProviders as? [String] == currentProviders as? [String]), "UserDefaults enabledProviders must be restored")
+
+        print("✓ Provider toggle and Settings refresh tests passed")
     }
 }
