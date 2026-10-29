@@ -15,7 +15,7 @@ public final class CodexProvider: UsageProvider {
     public func fetchUsage() async throws -> ProviderUsage {
         let path = ProviderPaths.resolve(customStatePath, default: ProviderPaths.codexDefault)
         let now = Date()
-        let events = CodexRolloutScanner.scan(path: path)
+        let events = CodexRolloutScanner.scan(path: path, now: now)
         return CodexProvider.makeUsage(events: events, chatGPTApp: CodexProvider.detectChatGPTApp(), now: now)
     }
 
@@ -109,33 +109,72 @@ enum CodexRolloutScanner {
     private static let lock = NSLock()
     private static var cache: [String: (modified: Date, events: [Event])] = [:]
 
-    static func scan(path: String) -> [Event] {
+    static func clearCache() {
+        lock.lock()
+        defer { lock.unlock() }
+        cache.removeAll()
+    }
+
+    /// Scans rollout files, limiting parsing to files modified within the last 7 days (`modified >= weekAgo`),
+    /// falling back to the single most recent rollout file if all files are older than 7 days.
+    static func scan(path: String, now: Date = Date()) -> [Event] {
         let url = URL(fileURLWithPath: (path as NSString).expandingTildeInPath)
         var isDirectory: ObjCBool = false
         guard FileManager.default.fileExists(atPath: url.path, isDirectory: &isDirectory) else { return [] }
 
-        let files: [URL]
+        let weekAgo = now.addingTimeInterval(-7 * 86400)
+        let filesToParse: [(url: URL, modified: Date)]
+
         if isDirectory.boolValue {
-            let enumerator = FileManager.default.enumerator(
+            guard let enumerator = FileManager.default.enumerator(
                 at: url,
-                includingPropertiesForKeys: [.contentModificationDateKey],
+                includingPropertiesForKeys: [.contentModificationDateKey, .isRegularFileKey],
                 options: [.skipsHiddenFiles]
-            )
-            files = (enumerator?.allObjects as? [URL] ?? []).filter {
-                $0.pathExtension == "jsonl" && $0.lastPathComponent.hasPrefix("rollout-")
+            ) else {
+                return []
+            }
+
+            var recentFiles: [(url: URL, modified: Date)] = []
+            var latestOlderFile: (url: URL, modified: Date)? = nil
+
+            for case let fileURL as URL in enumerator {
+                guard fileURL.pathExtension == "jsonl",
+                      fileURL.lastPathComponent.hasPrefix("rollout-"),
+                      let values = try? fileURL.resourceValues(forKeys: [.contentModificationDateKey, .isRegularFileKey]),
+                      values.isRegularFile != false,
+                      let modified = values.contentModificationDate else {
+                    continue
+                }
+
+                if modified >= weekAgo {
+                    recentFiles.append((fileURL, modified))
+                } else if latestOlderFile == nil || modified > latestOlderFile!.modified {
+                    latestOlderFile = (fileURL, modified)
+                }
+            }
+
+            if !recentFiles.isEmpty {
+                filesToParse = recentFiles
+            } else if let latestOlderFile {
+                filesToParse = [latestOlderFile]
+            } else {
+                filesToParse = []
             }
         } else {
-            files = [url]
+            let modified = (try? url.resourceValues(forKeys: [.contentModificationDateKey]))?.contentModificationDate
+                ?? ((try? FileManager.default.attributesOfItem(atPath: url.path)[.modificationDate]) as? Date)
+            if let modified {
+                filesToParse = [(url, modified)]
+            } else {
+                filesToParse = []
+            }
         }
 
         lock.lock()
         defer { lock.unlock() }
 
         var events: [Event] = []
-        for file in files {
-            guard let modified = (try? file.resourceValues(forKeys: [.contentModificationDateKey]))?.contentModificationDate else {
-                continue
-            }
+        for (file, modified) in filesToParse {
             if let cached = cache[file.path], cached.modified == modified {
                 events.append(contentsOf: cached.events)
             } else if let data = try? Data(contentsOf: file) {
