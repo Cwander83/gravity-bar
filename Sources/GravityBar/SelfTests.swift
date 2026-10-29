@@ -516,6 +516,60 @@ enum SelfTests {
         let resetDiff = idleUsage.weeklyMetric?.resetDate.timeIntervalSince(now) ?? 0
         check(abs(resetDiff - 4 * 86400) < 5, "Fallback window resetDate must match future resets_at")
 
+        // 3m. CLI scanner cache eviction (GRBA-3)
+        // ClaudeCodeUsageScanner cache pruning on deletion and aging out
+        ClaudeCodeUsageScanner.clearCache()
+        check(ClaudeCodeUsageScanner.cachedCount == 0)
+        let claudeCacheDir = "claude-cache-test"
+        write("""
+        {"type":"assistant","timestamp":"\(iso(minutesAgo: 1440))","message":{"id":"m1","usage":{"input_tokens":10,"output_tokens":10,"cache_read_input_tokens":0,"cache_creation_input_tokens":0}}}
+        """, to: "\(claudeCacheDir)/p1/session.jsonl", modified: now.addingTimeInterval(-86400))
+        write("""
+        {"type":"assistant","timestamp":"\(iso(minutesAgo: 2880))","message":{"id":"m2","usage":{"input_tokens":20,"output_tokens":20,"cache_read_input_tokens":0,"cache_creation_input_tokens":0}}}
+        """, to: "\(claudeCacheDir)/p2/session.jsonl", modified: now.addingTimeInterval(-2 * 86400))
+
+        let claudeScanDir = root.appendingPathComponent(claudeCacheDir).path
+        _ = ClaudeCodeUsageScanner.scan(projectsPath: claudeScanDir, now: now)
+        check(ClaudeCodeUsageScanner.cachedCount == 2, "Claude scanner must cache both active files")
+
+        // Delete file 1 -> must be evicted from cache
+        try? fm.removeItem(at: root.appendingPathComponent("\(claudeCacheDir)/p1/session.jsonl"))
+        _ = ClaudeCodeUsageScanner.scan(projectsPath: claudeScanDir, now: now)
+        check(ClaudeCodeUsageScanner.cachedCount == 1, "Deleted file must be evicted from Claude cache")
+
+        // Age file 2 past 7 days -> must be evicted from cache
+        let oldDate = now.addingTimeInterval(-10 * 86400)
+        try? fm.setAttributes([.modificationDate: oldDate], ofItemAtPath: root.appendingPathComponent("\(claudeCacheDir)/p2/session.jsonl").path)
+        _ = ClaudeCodeUsageScanner.scan(projectsPath: claudeScanDir, now: now)
+        check(ClaudeCodeUsageScanner.cachedCount == 0, "Aged-out file (>7d) must be evicted from Claude cache")
+
+        // CodexRolloutScanner cache pruning on deletion and aging out
+        CodexRolloutScanner.clearCache()
+        check(CodexRolloutScanner.cachedCount == 0)
+        let codexCacheDir = "codex-cache-test"
+        let codexScanDir = root.appendingPathComponent(codexCacheDir).path
+        write("""
+        {"timestamp":"\(iso(minutesAgo: 1440))","type":"event_msg","payload":{"type":"token_count","info":{"total_token_usage":{"input_tokens":100,"cached_input_tokens":0,"cache_write_input_tokens":0,"output_tokens":10,"reasoning_output_tokens":0,"total_tokens":110}}}}
+        """, to: "\(codexCacheDir)/rollout-1.jsonl", modified: now.addingTimeInterval(-86400))
+        write("""
+        {"timestamp":"\(iso(minutesAgo: 2880))","type":"event_msg","payload":{"type":"token_count","info":{"total_token_usage":{"input_tokens":200,"cached_input_tokens":0,"cache_write_input_tokens":0,"output_tokens":20,"reasoning_output_tokens":0,"total_tokens":220}}}}
+        """, to: "\(codexCacheDir)/rollout-2.jsonl", modified: now.addingTimeInterval(-2 * 86400))
+
+        _ = CodexRolloutScanner.scan(path: codexScanDir, now: now)
+        check(CodexRolloutScanner.cachedCount == 2, "Codex scanner must cache both active rollout files")
+
+        // Delete file 1 -> must be evicted from cache
+        try? fm.removeItem(at: root.appendingPathComponent("\(codexCacheDir)/rollout-1.jsonl"))
+        _ = CodexRolloutScanner.scan(path: codexScanDir, now: now)
+        check(CodexRolloutScanner.cachedCount == 1, "Deleted file must be evicted from Codex cache")
+
+        // Add older file (>7d) and newer file -> older file must not be cached
+        write("""
+        {"timestamp":"\(iso(minutesAgo: 14 * 1440))","type":"event_msg","payload":{"type":"token_count","info":{"total_token_usage":{"input_tokens":300,"cached_input_tokens":0,"cache_write_input_tokens":0,"output_tokens":30,"reasoning_output_tokens":0,"total_tokens":330}}}}
+        """, to: "\(codexCacheDir)/rollout-3.jsonl", modified: now.addingTimeInterval(-14 * 86400))
+        _ = CodexRolloutScanner.scan(path: codexScanDir, now: now)
+        check(CodexRolloutScanner.cachedCount == 1, "Older file (>7d) must not be in cache when recent file exists")
+
         // Malformed input never crashes and yields nothing
         let garbage = Data("{not json\n\u{0}\u{1}".utf8)
         check(ClaudeProvider.parseSamples(from: garbage).isEmpty)

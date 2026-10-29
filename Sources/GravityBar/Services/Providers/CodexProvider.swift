@@ -115,12 +115,23 @@ enum CodexRolloutScanner {
         cache.removeAll()
     }
 
+    static var cachedCount: Int {
+        lock.lock()
+        defer { lock.unlock() }
+        return cache.count
+    }
+
     /// Scans rollout files, limiting parsing to files modified within the last 7 days (`modified >= weekAgo`),
     /// falling back to the single most recent rollout file if all files are older than 7 days.
     static func scan(path: String, now: Date = Date()) -> [Event] {
         let url = URL(fileURLWithPath: (path as NSString).expandingTildeInPath)
         var isDirectory: ObjCBool = false
-        guard FileManager.default.fileExists(atPath: url.path, isDirectory: &isDirectory) else { return [] }
+        guard FileManager.default.fileExists(atPath: url.path, isDirectory: &isDirectory) else {
+            lock.lock()
+            defer { lock.unlock() }
+            cache.removeAll()
+            return []
+        }
 
         let weekAgo = now.addingTimeInterval(-7 * 86400)
         let filesToParse: [(url: URL, modified: Date)]
@@ -131,6 +142,9 @@ enum CodexRolloutScanner {
                 includingPropertiesForKeys: [.contentModificationDateKey, .isRegularFileKey],
                 options: [.skipsHiddenFiles]
             ) else {
+                lock.lock()
+                defer { lock.unlock() }
+                cache.removeAll()
                 return []
             }
 
@@ -173,10 +187,8 @@ enum CodexRolloutScanner {
         lock.lock()
         defer { lock.unlock() }
 
-        if isDirectory.boolValue {
-            let activePaths = Set(filesToParse.map { $0.url.path })
-            cache = cache.filter { activePaths.contains($0.key) }
-        }
+        let activePaths = Set(filesToParse.map { $0.url.path })
+        cache = cache.filter { activePaths.contains($0.key) }
 
         var events: [Event] = []
         for (file, modified) in filesToParse {
