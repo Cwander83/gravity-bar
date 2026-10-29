@@ -21,7 +21,7 @@ public struct UsageMetricRowView: View {
                         .font(.system(size: 8, weight: .black))
                         .padding(.horizontal, 5)
                         .padding(.vertical, 2)
-                        .background(Color.white.opacity(0.08))
+                        .background(GravityBarTokens.badgeBackground)
                         .foregroundColor(.secondary)
                         .cornerRadius(4)
                 }
@@ -71,7 +71,7 @@ public struct UsageMetricRowView: View {
         )
         .overlay(
             RoundedRectangle(cornerRadius: GravityBarTokens.cardCornerRadius)
-                .stroke(Color.white.opacity(0.09), lineWidth: 1)
+                .stroke(GravityBarTokens.cardBorder, lineWidth: 1)
         )
     }
 
@@ -219,7 +219,7 @@ public struct UsageMetricRowView: View {
             GeometryReader { geometry in
                 ZStack(alignment: .leading) {
                     Capsule()
-                        .fill(Color.white.opacity(0.08))
+                        .fill(GravityBarTokens.progressTrack)
                         .frame(height: GravityBarTokens.progressBarHeight)
 
                     Capsule()

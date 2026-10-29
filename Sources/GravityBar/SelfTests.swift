@@ -1,5 +1,6 @@
 import Foundation
 import AppKit
+import SwiftUI
 
 /// Self-tests run by `swift run GravityBar --test` (and CI). Deterministic fixture checks gate the run;
 /// the live section at the end only prints what this machine reports.
@@ -419,6 +420,26 @@ enum SelfTests {
         check((savedGrba7Claude == nil && restoredGrba7Claude == nil) || (savedGrba7Claude as? String == restoredGrba7Claude as? String), "UserDefaults claudePath must be restored")
         check((savedGrba7Mock == nil && restoredGrba7Mock == nil) || (savedGrba7Mock as? Bool == restoredGrba7Mock as? Bool), "UserDefaults isMockMode must be restored")
         print("✓ Reset showingSettings on popover close tests passed")
+
+        // 3p. Adaptive design tokens for Light and Dark mode contrast (GRBA-8)
+        check(GravityBarTokens.buttonBackground == Color.primary.opacity(0.06), "buttonBackground token must use adaptive Color.primary.opacity(0.06)")
+        check(GravityBarTokens.badgeBackground == Color.primary.opacity(0.08), "badgeBackground token must use adaptive Color.primary.opacity(0.08)")
+        check(GravityBarTokens.progressTrack == Color.primary.opacity(0.08), "progressTrack token must use adaptive Color.primary.opacity(0.08)")
+        check(GravityBarTokens.circularGaugeTrack == Color.primary.opacity(0.09), "circularGaugeTrack token must use adaptive Color.primary.opacity(0.09)")
+        check(GravityBarTokens.cardBorder == Color.primary.opacity(0.09), "cardBorder token must use adaptive Color.primary.opacity(0.09)")
+
+        // Verify PopoverView and UsageMetricRowView can render in both light and dark color schemes
+        let sampleUsage = ProviderUsage(
+            provider: .codex,
+            fiveHourMetric: UsageMetric(windowType: .fiveHour, usedPercent: 42.0, resetDate: now.addingTimeInterval(3600)),
+            weeklyMetric: UsageMetric(windowType: .weekly, usedPercent: 68.0, resetDate: now.addingTimeInterval(86400)),
+            planBadge: "Plus"
+        )
+        _ = PopoverView(manager: testManager).environment(\.colorScheme, .light)
+        _ = PopoverView(manager: testManager).environment(\.colorScheme, .dark)
+        _ = UsageMetricRowView(usage: sampleUsage).environment(\.colorScheme, .light)
+        _ = UsageMetricRowView(usage: sampleUsage).environment(\.colorScheme, .dark)
+        print("✓ Adaptive design tokens and light/dark appearance tests passed")
 
         // MARK: Live machine smoke output (informational)
         // Reads whatever is installed on this Mac. Nothing here can fail the run: on CI these sources are

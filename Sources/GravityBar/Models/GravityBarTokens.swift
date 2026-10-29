@@ -19,6 +19,13 @@ public enum GravityBarTokens {
     public static let colorCritical = Color(red: 0.94, green: 0.27, blue: 0.27)    // #ef4444
     public static let colorAccent = Color(red: 0.39, green: 0.40, blue: 0.95)      // #6366f1
 
+    // Adaptive Surfaces, Borders & Tracks (Light & Dark mode contrast)
+    public static let buttonBackground = Color.primary.opacity(0.06)
+    public static let badgeBackground = Color.primary.opacity(0.08)
+    public static let progressTrack = Color.primary.opacity(0.08)
+    public static let circularGaugeTrack = Color.primary.opacity(0.09)
+    public static let cardBorder = Color.primary.opacity(0.09)
+
     public static func colorFor(threshold: QuotaThreshold) -> Color {
         switch threshold {
         case .normal: return colorNormal
