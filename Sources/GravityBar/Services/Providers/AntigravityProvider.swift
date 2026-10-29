@@ -69,6 +69,16 @@ public final class AntigravityProvider: UsageProvider {
 
     // MARK: - Local LanguageServerService RPC Discovery
 
+    /// Shared TLS delegate accepting self-signed loopback certificates.
+    static let sharedDelegate = LocalhostTrustDelegate()
+
+    /// Shared ephemeral session reused across polling cycles to avoid URLSession and connection pool leaks.
+    static let sharedSession: URLSession = {
+        let sessionConfig = URLSessionConfiguration.ephemeral
+        sessionConfig.timeoutIntervalForRequest = 1.5
+        return URLSession(configuration: sessionConfig, delegate: sharedDelegate, delegateQueue: nil)
+    }()
+
     /// A discovered language_server RPC endpoint.
     struct Endpoint: Equatable {
         let pid: Int32
@@ -76,7 +86,7 @@ public final class AntigravityProvider: UsageProvider {
         let csrfToken: String
     }
 
-    /// Endpoints from the last discovery. Providers are rebuilt on every refresh, so the cache is static.
+    /// Endpoints from the last discovery.
     private static let endpointLock = NSLock()
     private static var cachedEndpoints: [Endpoint] = []
     private static var endpointsDiscoveredAt: Date?
@@ -84,9 +94,7 @@ public final class AntigravityProvider: UsageProvider {
     static let endpointCacheLifetime: TimeInterval = 5 * 60
 
     private func fetchFromLocalLanguageServer() async -> ProviderUsage? {
-        let sessionConfig = URLSessionConfiguration.ephemeral
-        sessionConfig.timeoutIntervalForRequest = 1.5
-        let session = URLSession(configuration: sessionConfig, delegate: LocalhostTrustDelegate(), delegateQueue: nil)
+        let session = AntigravityProvider.sharedSession
         let now = Date()
 
         // Fast path: query cached endpoints directly (no subprocesses). Any failure falls back to discovery.
@@ -326,6 +334,15 @@ public final class AntigravityProvider: UsageProvider {
 /// Only loopback hosts are trusted this way; any other host gets the system's normal certificate checks.
 final class LocalhostTrustDelegate: NSObject, URLSessionDelegate {
     static let loopbackHosts: Set<String> = ["127.0.0.1", "localhost", "::1"]
+    private static let lock = NSLock()
+    private(set) static var instanceCount = 0
+
+    override init() {
+        Self.lock.withLock {
+            Self.instanceCount += 1
+        }
+        super.init()
+    }
 
     /// True only for a server-trust challenge from a loopback host.
     static func shouldTrust(host: String, authenticationMethod: String) -> Bool {

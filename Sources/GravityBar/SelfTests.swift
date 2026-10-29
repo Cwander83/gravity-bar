@@ -299,6 +299,44 @@ enum SelfTests {
         await providerFixtureChecks(now: now)
         print("✓ Provider fixture, malformed input and TLS scope tests passed")
 
+        // 3k. URLSession reuse and provider caching (GRBA-1)
+        check(AntigravityProvider.sharedSession.delegate === AntigravityProvider.sharedDelegate, "AntigravityProvider must reuse shared delegate")
+        check(AntigravityProvider.sharedSession.configuration.timeoutIntervalForRequest == 1.5, "AntigravityProvider session timeout must be 1.5s")
+        check(OllamaProvider.sharedSession.configuration.timeoutIntervalForRequest == 1.5, "OllamaProvider session timeout must be 1.5s")
+
+        let delegateCountBefore = LocalhostTrustDelegate.instanceCount
+        check(delegateCountBefore > 0, "LocalhostTrustDelegate should be initialized with shared delegate")
+        _ = try? await AntigravityProvider().fetchUsage()
+        _ = try? await AntigravityProvider().fetchUsage()
+        _ = try? await AntigravityProvider().fetchUsage()
+        check(LocalhostTrustDelegate.instanceCount == delegateCountBefore, "LocalhostTrustDelegate must not leak across polling cycles")
+
+        let testManager = UsageManager(startPollingImmediately: false)
+        let initialClaude = testManager.providers[.claude]
+        let initialCodex = testManager.providers[.codex]
+        let initialGemini = testManager.providers[.gemini]
+        let initialOllama = testManager.providers[.ollama]
+        check(initialClaude != nil && initialCodex != nil && initialGemini != nil && initialOllama != nil, "UsageManager must initialize all providers")
+
+        testManager.setupProvidersIfNeeded()
+        check(testManager.providers[.claude] === initialClaude as AnyObject, "UsageManager must not recreate providers when config unchanged")
+        check(testManager.providers[.gemini] === initialGemini as AnyObject, "UsageManager must not recreate AntigravityProvider when config unchanged")
+
+        let savedClaudeDefault = UserDefaults.standard.object(forKey: "GravityBar_claudePath")
+        defer {
+            if let saved = savedClaudeDefault {
+                UserDefaults.standard.set(saved, forKey: "GravityBar_claudePath")
+            } else {
+                UserDefaults.standard.removeObject(forKey: "GravityBar_claudePath")
+            }
+        }
+        testManager.claudePath = "/tmp/test-claude-path"
+        check(testManager.providers[.claude] !== initialClaude as AnyObject, "UsageManager must recreate ClaudeProvider when path changes")
+        if let saved = savedClaudeDefault as? String {
+            testManager.claudePath = saved
+        }
+        print("✓ URLSession reuse and provider caching tests passed")
+
         // MARK: Live machine smoke output (informational)
         // Reads whatever is installed on this Mac. Nothing here can fail the run: on CI these sources are
         // absent, and the deterministic fixture checks above are what gate the build.
@@ -361,10 +399,13 @@ enum SelfTests {
         let fm = FileManager.default
         let root = fm.temporaryDirectory.appendingPathComponent("gravitybar-fixtures-\(UUID().uuidString)")
         defer { try? fm.removeItem(at: root) }
-        func write(_ text: String, to relativePath: String) {
+        func write(_ text: String, to relativePath: String, modified: Date? = nil) {
             let url = root.appendingPathComponent(relativePath)
             try? fm.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
             try? Data(text.utf8).write(to: url)
+            if let modified {
+                try? fm.setAttributes([.modificationDate: modified], ofItemAtPath: url.path)
+            }
         }
         func ms(minutesAgo: Double) -> Int { Int((now.timeIntervalSince1970 - minutesAgo * 60) * 1000) }
         func iso(minutesAgo: Double) -> String { ISO8601DateFormatter().string(from: now.addingTimeInterval(-minutesAgo * 60)) }
@@ -431,6 +472,103 @@ enum SelfTests {
         check(codex?.planBadge == "Plus")
         check(codex?.cliTokenUsage?.last5h == TokenUsage(inputTokens: 600 - 600, outputTokens: 200, cacheReadTokens: 2000, cacheCreationTokens: 0), "5h delta: input 2000 incl. 2000 cached")
         check(codex?.cliTokenUsage?.last7d == TokenUsage(inputTokens: 600, outputTokens: 250, cacheReadTokens: 2400, cacheCreationTokens: 0))
+
+        // Codex: 7-day scan window and fallback (GRBA-2)
+        CodexRolloutScanner.clearCache()
+        let oldModified = now.addingTimeInterval(-14 * 86400)
+        let recentModified = now.addingTimeInterval(-2 * 86400)
+        write("""
+        {"timestamp":"\(iso(minutesAgo: 14 * 1440))","type":"event_msg","payload":{"type":"token_count","info":{"total_token_usage":{"input_tokens":500,"cached_input_tokens":0,"cache_write_input_tokens":0,"output_tokens":50,"reasoning_output_tokens":0,"total_tokens":550}},"rate_limits":{"limit_id":"codex","primary":{"used_percent":10.0,"window_minutes":10080,"resets_at":\(Int(oldModified.timeIntervalSince1970))},"secondary":null,"plan_type":"plus"}}}
+        """, to: "codex-window/sessions/2026/10/15/rollout-old.jsonl", modified: oldModified)
+        write("""
+        {"timestamp":"\(iso(minutesAgo: 2 * 1440))","type":"event_msg","payload":{"type":"token_count","info":{"total_token_usage":{"input_tokens":800,"cached_input_tokens":0,"cache_write_input_tokens":0,"output_tokens":80,"reasoning_output_tokens":0,"total_tokens":880}},"rate_limits":{"limit_id":"codex","primary":{"used_percent":40.0,"window_minutes":10080,"resets_at":\(Int(recentModified.timeIntervalSince1970))},"secondary":null,"plan_type":"plus"}}}
+        """, to: "codex-window/sessions/2026/10/27/rollout-recent.jsonl", modified: recentModified)
+
+        let mixedEvents = CodexRolloutScanner.scan(path: root.appendingPathComponent("codex-window/sessions").path, now: now)
+        check(mixedEvents.contains { $0.session.contains("rollout-recent.jsonl") }, "Recent rollout file must be parsed")
+        check(!mixedEvents.contains { $0.session.contains("rollout-old.jsonl") }, "Rollout file older than 7d must be skipped when newer files exist")
+
+        // Codex: when all files are older than 7 days, fall back to the single most recent older file
+        CodexRolloutScanner.clearCache()
+        let veryOldModified = now.addingTimeInterval(-30 * 86400)
+        let latestOldModified = now.addingTimeInterval(-10 * 86400)
+        let futureWeeklyReset = Int(now.addingTimeInterval(4 * 86400).timeIntervalSince1970)
+        write("""
+        {"timestamp":"\(iso(minutesAgo: 30 * 1440))","type":"event_msg","payload":{"type":"token_count","info":{"total_token_usage":{"input_tokens":200,"cached_input_tokens":0,"cache_write_input_tokens":0,"output_tokens":20,"reasoning_output_tokens":0,"total_tokens":220}},"rate_limits":{"limit_id":"codex","primary":{"used_percent":5.0,"window_minutes":10080,"resets_at":\(Int(veryOldModified.timeIntervalSince1970))},"secondary":null,"plan_type":"plus"}}}
+        """, to: "codex-idle/sessions/2026/09/29/rollout-very-old.jsonl", modified: veryOldModified)
+        write("""
+        {"timestamp":"\(iso(minutesAgo: 10 * 1440))","type":"event_msg","payload":{"type":"token_count","info":{"total_token_usage":{"input_tokens":300,"cached_input_tokens":0,"cache_write_input_tokens":0,"output_tokens":30,"reasoning_output_tokens":0,"total_tokens":330}},"rate_limits":{"limit_id":"codex","primary":{"used_percent":15.0,"window_minutes":10080,"resets_at":\(futureWeeklyReset)},"secondary":null,"plan_type":"plus"}}}
+        """, to: "codex-idle/sessions/2026/10/19/rollout-latest-old.jsonl", modified: latestOldModified)
+
+        let idleEvents = CodexRolloutScanner.scan(path: root.appendingPathComponent("codex-idle/sessions").path, now: now)
+        check(idleEvents.contains { $0.session.contains("rollout-latest-old.jsonl") }, "Latest old rollout file must be parsed as fallback")
+        check(!idleEvents.contains { $0.session.contains("rollout-very-old.jsonl") }, "Older rollout files beyond the latest must be skipped")
+
+        // Deterministic check without live machine app state
+        let idleUsage = CodexProvider.makeUsage(events: idleEvents, chatGPTApp: nil, now: now)
+        if case let .idleCached(lastSeen) = idleUsage.connectionState {
+            check(abs(lastSeen.timeIntervalSince(now.addingTimeInterval(-10 * 86400))) < 5, "lastSeen must equal latest-old event timestamp")
+        } else {
+            check(false, "Codex idle >7d must report connectionState .idleCached")
+        }
+        check(idleUsage.weeklyMetric?.usedPercent == 15.0, "Active weekly window from fallback file must be surfaced")
+        check(idleUsage.weeklyMetric?.windowType == .weekly, "Fallback window should be weekly")
+        let resetDiff = idleUsage.weeklyMetric?.resetDate.timeIntervalSince(now) ?? 0
+        check(abs(resetDiff - 4 * 86400) < 5, "Fallback window resetDate must match future resets_at")
+
+        // 3m. CLI scanner cache eviction (GRBA-3)
+        // ClaudeCodeUsageScanner cache pruning on deletion and aging out
+        ClaudeCodeUsageScanner.clearCache()
+        check(ClaudeCodeUsageScanner.cachedCount == 0)
+        let claudeCacheDir = "claude-cache-test"
+        write("""
+        {"type":"assistant","timestamp":"\(iso(minutesAgo: 1440))","message":{"id":"m1","usage":{"input_tokens":10,"output_tokens":10,"cache_read_input_tokens":0,"cache_creation_input_tokens":0}}}
+        """, to: "\(claudeCacheDir)/p1/session.jsonl", modified: now.addingTimeInterval(-86400))
+        write("""
+        {"type":"assistant","timestamp":"\(iso(minutesAgo: 2880))","message":{"id":"m2","usage":{"input_tokens":20,"output_tokens":20,"cache_read_input_tokens":0,"cache_creation_input_tokens":0}}}
+        """, to: "\(claudeCacheDir)/p2/session.jsonl", modified: now.addingTimeInterval(-2 * 86400))
+
+        let claudeScanDir = root.appendingPathComponent(claudeCacheDir).path
+        _ = ClaudeCodeUsageScanner.scan(projectsPath: claudeScanDir, now: now)
+        check(ClaudeCodeUsageScanner.cachedCount == 2, "Claude scanner must cache both active files")
+
+        // Delete file 1 -> must be evicted from cache
+        try? fm.removeItem(at: root.appendingPathComponent("\(claudeCacheDir)/p1/session.jsonl"))
+        _ = ClaudeCodeUsageScanner.scan(projectsPath: claudeScanDir, now: now)
+        check(ClaudeCodeUsageScanner.cachedCount == 1, "Deleted file must be evicted from Claude cache")
+
+        // Age file 2 past 7 days -> must be evicted from cache
+        let oldDate = now.addingTimeInterval(-10 * 86400)
+        try? fm.setAttributes([.modificationDate: oldDate], ofItemAtPath: root.appendingPathComponent("\(claudeCacheDir)/p2/session.jsonl").path)
+        _ = ClaudeCodeUsageScanner.scan(projectsPath: claudeScanDir, now: now)
+        check(ClaudeCodeUsageScanner.cachedCount == 0, "Aged-out file (>7d) must be evicted from Claude cache")
+
+        // CodexRolloutScanner cache pruning on deletion and aging out
+        CodexRolloutScanner.clearCache()
+        check(CodexRolloutScanner.cachedCount == 0)
+        let codexCacheDir = "codex-cache-test"
+        let codexScanDir = root.appendingPathComponent(codexCacheDir).path
+        write("""
+        {"timestamp":"\(iso(minutesAgo: 1440))","type":"event_msg","payload":{"type":"token_count","info":{"total_token_usage":{"input_tokens":100,"cached_input_tokens":0,"cache_write_input_tokens":0,"output_tokens":10,"reasoning_output_tokens":0,"total_tokens":110}}}}
+        """, to: "\(codexCacheDir)/rollout-1.jsonl", modified: now.addingTimeInterval(-86400))
+        write("""
+        {"timestamp":"\(iso(minutesAgo: 2880))","type":"event_msg","payload":{"type":"token_count","info":{"total_token_usage":{"input_tokens":200,"cached_input_tokens":0,"cache_write_input_tokens":0,"output_tokens":20,"reasoning_output_tokens":0,"total_tokens":220}}}}
+        """, to: "\(codexCacheDir)/rollout-2.jsonl", modified: now.addingTimeInterval(-2 * 86400))
+
+        _ = CodexRolloutScanner.scan(path: codexScanDir, now: now)
+        check(CodexRolloutScanner.cachedCount == 2, "Codex scanner must cache both active rollout files")
+
+        // Delete file 1 -> must be evicted from cache
+        try? fm.removeItem(at: root.appendingPathComponent("\(codexCacheDir)/rollout-1.jsonl"))
+        _ = CodexRolloutScanner.scan(path: codexScanDir, now: now)
+        check(CodexRolloutScanner.cachedCount == 1, "Deleted file must be evicted from Codex cache")
+
+        // Add older file (>7d) and newer file -> older file must not be cached
+        write("""
+        {"timestamp":"\(iso(minutesAgo: 14 * 1440))","type":"event_msg","payload":{"type":"token_count","info":{"total_token_usage":{"input_tokens":300,"cached_input_tokens":0,"cache_write_input_tokens":0,"output_tokens":30,"reasoning_output_tokens":0,"total_tokens":330}}}}
+        """, to: "\(codexCacheDir)/rollout-3.jsonl", modified: now.addingTimeInterval(-14 * 86400))
+        _ = CodexRolloutScanner.scan(path: codexScanDir, now: now)
+        check(CodexRolloutScanner.cachedCount == 1, "Older file (>7d) must not be in cache when recent file exists")
 
         // Malformed input never crashes and yields nothing
         let garbage = Data("{not json\n\u{0}\u{1}".utf8)
