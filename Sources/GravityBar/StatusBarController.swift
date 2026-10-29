@@ -138,7 +138,7 @@ public final class StatusBarController: NSObject, NSPopoverDelegate {
         Task { await manager.refreshAll() }
     }
 
-    @objc private func openPreferences() {
+    @objc func openPreferences() {
         manager.showingSettings = true
         showPopover(nil)
     }
@@ -159,6 +159,9 @@ public final class StatusBarController: NSObject, NSPopoverDelegate {
         popover.performClose(sender)
         manager.isPopoverOpen = false
         stopEventMonitor()
+        if manager.showingSettings {
+            manager.dismissSettings()
+        }
     }
 
     private func startEventMonitor() {
