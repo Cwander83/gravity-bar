@@ -337,6 +337,31 @@ enum SelfTests {
         }
         print("✓ URLSession reuse and provider caching tests passed")
 
+        // 3n. Idle timer and button update gating (GRBA-4)
+        check(!testManager.isPopoverOpen, "Popover should default to closed")
+        check(!testManager.isCountdownTimerRunning, "Countdown timer must not run while popover is closed")
+
+        testManager.isPopoverOpen = true
+        check(testManager.isCountdownTimerRunning, "Countdown timer must run while popover is open")
+
+        testManager.isPopoverOpen = false
+        check(!testManager.isCountdownTimerRunning, "Countdown timer must stop when popover closes")
+
+        let controller = StatusBarController(manager: testManager)
+        let initialUpdates = controller.updateCount
+        check(initialUpdates > 0, "Controller must initialize button on setup")
+
+        // Calling updateButtonUI with identical title and icon must not reconfigure or increment count
+        controller.updateButtonUI()
+        controller.updateButtonUI()
+        check(controller.updateCount == initialUpdates, "updateButtonUI must be a no-op when title and icon are unchanged")
+
+        // Triggering objectWillChange without changing state must not reconfigure button
+        testManager.objectWillChange.send()
+        await Task.yield()
+        check(controller.updateCount == initialUpdates, "objectWillChange must not trigger button reconfiguration when state is identical")
+        print("✓ Idle countdown gating and button update deduplication tests passed")
+
         // MARK: Live machine smoke output (informational)
         // Reads whatever is installed on this Mac. Nothing here can fail the run: on CI these sources are
         // absent, and the deterministic fixture checks above are what gate the build.

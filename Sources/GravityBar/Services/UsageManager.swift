@@ -64,6 +64,21 @@ public final class UsageManager: ObservableObject {
 
     @Published public var showingSettings: Bool = false
     @Published public var isSpinning: Bool = false
+    @Published public var isPopoverOpen: Bool = false {
+        didSet {
+            guard isPopoverOpen != oldValue else { return }
+            if isPopoverOpen {
+                startCountdownTimer()
+                objectWillChange.send()
+            } else {
+                stopCountdownTimer()
+            }
+        }
+    }
+
+    public var isCountdownTimerRunning: Bool {
+        countdownTimer != nil
+    }
 
     @Published public private(set) var isRefreshing: Bool = false
     @Published public private(set) var lastUpdated: Date?
@@ -120,7 +135,9 @@ public final class UsageManager: ObservableObject {
         setupProvidersIfNeeded()
         if startPollingImmediately {
             startPolling()
-            startCountdownTimer()
+            if isPopoverOpen {
+                startCountdownTimer()
+            }
 
             Task {
                 await refreshAll()
@@ -277,11 +294,21 @@ public final class UsageManager: ObservableObject {
 
     private func startCountdownTimer() {
         countdownTimer?.invalidate()
+        guard isPopoverOpen else {
+            countdownTimer = nil
+            return
+        }
         countdownTimer = Timer.scheduledTimer(withTimeInterval: 15.0, repeats: true) { [weak self] _ in
             Task { @MainActor [weak self] in
-                self?.objectWillChange.send()
+                guard let self = self, self.isPopoverOpen else { return }
+                self.objectWillChange.send()
             }
         }
+    }
+
+    private func stopCountdownTimer() {
+        countdownTimer?.invalidate()
+        countdownTimer = nil
     }
 
     deinit {

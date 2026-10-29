@@ -60,14 +60,16 @@ public final class StatusBarController: NSObject, NSPopoverDelegate {
         manager.objectWillChange
             .receive(on: DispatchQueue.main)
             .sink { [weak self] _ in
-                DispatchQueue.main.async {
-                    self?.updateButtonUI()
-                }
+                self?.updateButtonUI()
             }
             .store(in: &cancellables)
     }
 
-    private func updateButtonUI() {
+    internal private(set) var currentTitle: String?
+    internal private(set) var currentIconName: String?
+    internal private(set) var updateCount: Int = 0
+
+    func updateButtonUI() {
         guard let button = statusItem.button else { return }
 
         let titleString = StatusBarController.statusTitle(hasReadings: manager.hasReadings, usedPercent: manager.maxUrgencyPercent)
@@ -76,6 +78,13 @@ public final class StatusBarController: NSObject, NSPopoverDelegate {
         let iconName = manager.highestUrgency == .critical
             ? "gauge.with.needle.fill"
             : "chart.bar.fill"
+
+        guard titleString != currentTitle || iconName != currentIconName else {
+            return
+        }
+        currentTitle = titleString
+        currentIconName = iconName
+        updateCount += 1
 
         let config = NSImage.SymbolConfiguration(pointSize: 12, weight: .semibold)
         let image = NSImage(systemSymbolName: iconName, accessibilityDescription: "GravityBar")?
@@ -142,11 +151,13 @@ public final class StatusBarController: NSObject, NSPopoverDelegate {
         guard let button = statusItem.button else { return }
 
         popover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
+        manager.isPopoverOpen = true
         startEventMonitor()
     }
 
     public func closePopover(_ sender: AnyObject?) {
         popover.performClose(sender)
+        manager.isPopoverOpen = false
         stopEventMonitor()
     }
 
@@ -169,8 +180,22 @@ public final class StatusBarController: NSObject, NSPopoverDelegate {
 
     // MARK: - NSPopoverDelegate
 
+    public func popoverWillShow(_ notification: Notification) {
+        manager.isPopoverOpen = true
+    }
+
     public func popoverDidClose(_ notification: Notification) {
+        manager.isPopoverOpen = false
         stopEventMonitor()
+    }
+
+    deinit {
+        if let monitor = eventMonitor {
+            NSEvent.removeMonitor(monitor)
+        }
+        if let item = statusItem {
+            NSStatusBar.system.removeStatusItem(item)
+        }
     }
 }
 
