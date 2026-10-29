@@ -471,31 +471,47 @@ enum SelfTests {
         check(hView.pendingHover == nil, "showContextMenu must cancel pendingHover")
 
         // Test c2: Hover-open records lastHoverOpenTime; immediate left-click is ignored (kept open)
-        controller.closePopover(nil)
-        check(!testManager.isPopoverOpen)
+        let savedGrba9HoverToOpen = UserDefaults.standard.object(forKey: "GravityBar_hoverToOpen")
+        let originalHoverToOpen = testManager.hoverToOpen
+        do {
+            defer {
+                testManager.hoverToOpen = originalHoverToOpen
+                if let saved = savedGrba9HoverToOpen {
+                    UserDefaults.standard.set(saved, forKey: "GravityBar_hoverToOpen")
+                } else {
+                    UserDefaults.standard.removeObject(forKey: "GravityBar_hoverToOpen")
+                }
+            }
+            testManager.hoverToOpen = true
 
-        // Simulate hover open
-        controller.showPopover(nil)
-        controller.lastHoverOpenTime = Date()
-        check(testManager.isPopoverOpen)
+            controller.closePopover(nil)
+            check(!testManager.isPopoverOpen)
 
-        // Immediate left-click (within 0.4s) must NOT close the popover
-        if let btn = controller.statusItem.button {
-            controller.statusItemClicked(btn)
-            check(testManager.isPopoverOpen, "Left-click within 400ms of hover-open must keep popover open")
+            // Trigger hover open via onHover closure
+            hView.onHover?()
+            check(controller.lastHoverOpenTime != nil, "onHover must record lastHoverOpenTime")
+            check(testManager.isPopoverOpen, "onHover must open popover")
 
-            // Left-click after grace period (>0.4s) closes the popover
-            controller.lastHoverOpenTime = Date().addingTimeInterval(-1.0)
-            controller.statusItemClicked(btn)
-            check(!testManager.isPopoverOpen, "Left-click after grace period must close popover")
+            // Immediate left-click (within 0.4s) must NOT close the popover
+            if let btn = controller.statusItem.button {
+                controller.statusItemClicked(btn)
+                check(testManager.isPopoverOpen, "Left-click within 400ms of hover-open must keep popover open")
 
-            // Normal click-open (not hover) can be closed immediately by another click
-            controller.statusItemClicked(btn)
-            check(testManager.isPopoverOpen, "Click should open popover")
-            check(controller.lastHoverOpenTime == nil, "Click-open must not set lastHoverOpenTime")
-            controller.statusItemClicked(btn)
-            check(!testManager.isPopoverOpen, "Immediate click after click-open must close popover")
+                // Left-click after grace period (>0.4s) closes the popover
+                controller.lastHoverOpenTime = Date().addingTimeInterval(-1.0)
+                controller.statusItemClicked(btn)
+                check(!testManager.isPopoverOpen, "Left-click after grace period must close popover")
+
+                // Normal click-open (not hover) can be closed immediately by another click
+                controller.statusItemClicked(btn)
+                check(testManager.isPopoverOpen, "Click should open popover")
+                check(controller.lastHoverOpenTime == nil, "Click-open must not set lastHoverOpenTime")
+                controller.statusItemClicked(btn)
+                check(!testManager.isPopoverOpen, "Immediate click after click-open must close popover")
+            }
         }
+        let restoredGrba9HoverToOpen = UserDefaults.standard.object(forKey: "GravityBar_hoverToOpen")
+        check((savedGrba9HoverToOpen == nil && restoredGrba9HoverToOpen == nil) || (savedGrba9HoverToOpen as? Bool == restoredGrba9HoverToOpen as? Bool), "UserDefaults hoverToOpen must be restored")
         print("✓ Hover cancellation and click race protection tests passed")
 
         // MARK: Live machine smoke output (informational)

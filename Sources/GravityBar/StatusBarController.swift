@@ -173,7 +173,6 @@ public final class StatusBarController: NSObject, NSPopoverDelegate {
         lastHoverOpenTime = nil
         hoverView?.cancelPendingHover()
         popover.performClose(sender)
-        popover.close()
         manager.isPopoverOpen = false
         stopEventMonitor()
         if manager.showingSettings {
