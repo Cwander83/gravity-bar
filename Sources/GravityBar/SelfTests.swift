@@ -441,6 +441,79 @@ enum SelfTests {
         _ = UsageMetricRowView(usage: sampleUsage).environment(\.colorScheme, .dark)
         print("✓ Adaptive design tokens and light/dark appearance tests passed")
 
+        // 3q. Hover-to-open cancellation on click and click race protection (GRBA-9)
+        guard let hView = controller.hoverView else {
+            preconditionFailure("StatusBarController must instantiate HoverTrackingView")
+        }
+
+        // Test c1: Mouse enter schedules pendingHover; mouseDown cancels it
+        hView.handleMouseEnter()
+        check(hView.pendingHover != nil, "handleMouseEnter must schedule pendingHover")
+        hView.handleMouseDown()
+        check(hView.pendingHover == nil, "mouseDown must cancel pendingHover")
+
+        // Test c1: Mouse enter schedules pendingHover; rightMouseDown cancels it
+        hView.handleMouseEnter()
+        check(hView.pendingHover != nil, "handleMouseEnter must schedule pendingHover")
+        hView.handleRightMouseDown()
+        check(hView.pendingHover == nil, "rightMouseDown must cancel pendingHover")
+
+        // Test c1: Mouse enter schedules pendingHover; mouseExit cancels it
+        hView.handleMouseEnter()
+        check(hView.pendingHover != nil, "handleMouseEnter must schedule pendingHover")
+        hView.handleMouseExit()
+        check(hView.pendingHover == nil, "mouseExit must cancel pendingHover")
+
+        // Test c1: showContextMenu cancels pendingHover
+        hView.handleMouseEnter()
+        check(hView.pendingHover != nil, "handleMouseEnter must schedule pendingHover")
+        controller.showContextMenu(popUpMenu: false)
+        check(hView.pendingHover == nil, "showContextMenu must cancel pendingHover")
+
+        // Test c2: Hover-open records lastHoverOpenTime; immediate left-click is ignored (kept open)
+        let savedGrba9HoverToOpen = UserDefaults.standard.object(forKey: "GravityBar_hoverToOpen")
+        let originalHoverToOpen = testManager.hoverToOpen
+        do {
+            defer {
+                testManager.hoverToOpen = originalHoverToOpen
+                if let saved = savedGrba9HoverToOpen {
+                    UserDefaults.standard.set(saved, forKey: "GravityBar_hoverToOpen")
+                } else {
+                    UserDefaults.standard.removeObject(forKey: "GravityBar_hoverToOpen")
+                }
+            }
+            testManager.hoverToOpen = true
+
+            controller.closePopover(nil)
+            check(!testManager.isPopoverOpen)
+
+            // Trigger hover open via onHover closure
+            hView.onHover?()
+            check(controller.lastHoverOpenTime != nil, "onHover must record lastHoverOpenTime")
+            check(testManager.isPopoverOpen, "onHover must open popover")
+
+            // Immediate left-click (within 0.4s) must NOT close the popover
+            if let btn = controller.statusItem.button {
+                controller.statusItemClicked(btn)
+                check(testManager.isPopoverOpen, "Left-click within 400ms of hover-open must keep popover open")
+
+                // Left-click after grace period (>0.4s) closes the popover
+                controller.lastHoverOpenTime = Date().addingTimeInterval(-1.0)
+                controller.statusItemClicked(btn)
+                check(!testManager.isPopoverOpen, "Left-click after grace period must close popover")
+
+                // Normal click-open (not hover) can be closed immediately by another click
+                controller.statusItemClicked(btn)
+                check(testManager.isPopoverOpen, "Click should open popover")
+                check(controller.lastHoverOpenTime == nil, "Click-open must not set lastHoverOpenTime")
+                controller.statusItemClicked(btn)
+                check(!testManager.isPopoverOpen, "Immediate click after click-open must close popover")
+            }
+        }
+        let restoredGrba9HoverToOpen = UserDefaults.standard.object(forKey: "GravityBar_hoverToOpen")
+        check((savedGrba9HoverToOpen == nil && restoredGrba9HoverToOpen == nil) || (savedGrba9HoverToOpen as? Bool == restoredGrba9HoverToOpen as? Bool), "UserDefaults hoverToOpen must be restored")
+        print("✓ Hover cancellation and click race protection tests passed")
+
         // MARK: Live machine smoke output (informational)
         // Reads whatever is installed on this Mac. Nothing here can fail the run: on CI these sources are
         // absent, and the deterministic fixture checks above are what gate the build.
