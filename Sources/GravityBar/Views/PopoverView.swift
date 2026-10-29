@@ -28,6 +28,7 @@ public struct PopoverView: View {
         }
         .animation(.easeInOut(duration: 0.2), value: manager.showingSettings)
         .frame(width: GravityBarTokens.popoverWidth)
+        .clipped()
         .background(VisualEffectView(material: .popover, blendingMode: .behindWindow))
     }
 
@@ -129,7 +130,7 @@ public struct PopoverView: View {
                         .foregroundColor(.secondary)
                         .rotationEffect(.degrees(manager.isSpinning ? 360 : 0))
                         .frame(width: 26, height: 26)
-                        .background(Color.white.opacity(0.06))
+                        .background(GravityBarTokens.buttonBackground)
                         .cornerRadius(6)
                 }
                 .buttonStyle(.plain)
@@ -140,7 +141,7 @@ public struct PopoverView: View {
                         .font(.system(size: 12, weight: .semibold))
                         .foregroundColor(.secondary)
                         .frame(width: 26, height: 26)
-                        .background(Color.white.opacity(0.06))
+                        .background(GravityBarTokens.buttonBackground)
                         .cornerRadius(6)
                 }
                 .buttonStyle(.plain)
@@ -178,7 +179,7 @@ public struct PopoverView: View {
             // Circular Progress Indicator
             ZStack {
                 Circle()
-                    .stroke(Color.white.opacity(0.09), lineWidth: 4)
+                    .stroke(GravityBarTokens.circularGaugeTrack, lineWidth: 4)
                     .frame(width: 42, height: 42)
 
                 Circle()
@@ -203,7 +204,7 @@ public struct PopoverView: View {
         )
         .overlay(
             RoundedRectangle(cornerRadius: GravityBarTokens.cardCornerRadius)
-                .stroke(Color.white.opacity(0.09), lineWidth: 1)
+                .stroke(GravityBarTokens.cardBorder, lineWidth: 1)
         )
         .padding(.horizontal, 14)
         .padding(.top, 10)
