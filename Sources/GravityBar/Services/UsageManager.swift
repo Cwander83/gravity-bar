@@ -68,6 +68,15 @@ public final class UsageManager: ObservableObject {
     private var openedProviders: Set<ProviderType>?
     private var openedShowOffline: Bool?
 
+    private var settingsChangedSinceOpen: Bool {
+        let pathsChanged = (openedClaudePath != nil && openedClaudePath != claudePath) ||
+            (openedCodexPath != nil && openedCodexPath != codexPath) ||
+            (openedGeminiPath != nil && openedGeminiPath != geminiPath)
+        let providersChanged = (openedProviders != nil && openedProviders != enabledProviders) ||
+            (openedShowOffline != nil && openedShowOffline != showOfflineProviders)
+        return pathsChanged || providersChanged
+    }
+
     @Published public var showingSettings: Bool = false {
         didSet {
             if showingSettings {
@@ -77,37 +86,25 @@ public final class UsageManager: ObservableObject {
                 openedProviders = enabledProviders
                 openedShowOffline = showOfflineProviders
             } else if oldValue {
-                let pathsChanged = (openedClaudePath != nil && openedClaudePath != claudePath) ||
-                    (openedCodexPath != nil && openedCodexPath != codexPath) ||
-                    (openedGeminiPath != nil && openedGeminiPath != geminiPath)
-                let providersChanged = (openedProviders != nil && openedProviders != enabledProviders) ||
-                    (openedShowOffline != nil && openedShowOffline != showOfflineProviders)
-                if pathsChanged || providersChanged {
+                if settingsChangedSinceOpen {
                     Task { await refreshAll() }
                 }
-                openedClaudePath = nil
-                openedCodexPath = nil
-                openedGeminiPath = nil
-                openedProviders = nil
-                openedShowOffline = nil
+                clearOpenedSettingsSnapshot()
             }
         }
     }
 
-    public func dismissSettings(forceRefresh: Bool = false) {
-        let pathsChanged = (openedClaudePath != nil && openedClaudePath != claudePath) ||
-            (openedCodexPath != nil && openedCodexPath != codexPath) ||
-            (openedGeminiPath != nil && openedGeminiPath != geminiPath)
-        let providersChanged = (openedProviders != nil && openedProviders != enabledProviders) ||
-            (openedShowOffline != nil && openedShowOffline != showOfflineProviders)
-        let shouldRefresh = forceRefresh || pathsChanged || providersChanged
-
+    private func clearOpenedSettingsSnapshot() {
         openedClaudePath = nil
         openedCodexPath = nil
         openedGeminiPath = nil
         openedProviders = nil
         openedShowOffline = nil
+    }
 
+    public func dismissSettings(forceRefresh: Bool = false) {
+        let shouldRefresh = forceRefresh || settingsChangedSinceOpen
+        clearOpenedSettingsSnapshot()
         showingSettings = false
 
         if shouldRefresh {
