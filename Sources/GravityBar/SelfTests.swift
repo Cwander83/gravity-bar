@@ -1,4 +1,5 @@
 import Foundation
+import AppKit
 
 /// Self-tests run by `swift run GravityBar --test` (and CI). Deterministic fixture checks gate the run;
 /// the live section at the end only prints what this machine reports.
@@ -364,6 +365,60 @@ enum SelfTests {
         await Task.yield()
         check(controller.updateCount == initialUpdates, "objectWillChange must not trigger button reconfiguration when state is identical")
         print("✓ Idle countdown gating and button update deduplication tests passed")
+
+        // 3o. Reset showingSettings on popover close (GRBA-7)
+        let savedGrba7Claude = UserDefaults.standard.object(forKey: "GravityBar_claudePath")
+        let savedGrba7Mock = UserDefaults.standard.object(forKey: "GravityBar_isMockMode")
+        do {
+            defer {
+                if let saved = savedGrba7Claude {
+                    UserDefaults.standard.set(saved, forKey: "GravityBar_claudePath")
+                } else {
+                    UserDefaults.standard.removeObject(forKey: "GravityBar_claudePath")
+                }
+                if let saved = savedGrba7Mock {
+                    UserDefaults.standard.set(saved, forKey: "GravityBar_isMockMode")
+                } else {
+                    UserDefaults.standard.removeObject(forKey: "GravityBar_isMockMode")
+                }
+            }
+            testManager.isMockMode = true
+
+            // Verify openPreferences opens into Settings
+            check(!testManager.showingSettings)
+            controller.openPreferences()
+            check(testManager.showingSettings, "openPreferences must set showingSettings = true")
+            check(testManager.isPopoverOpen, "openPreferences must open popover")
+
+            // Popover close without changes resets showingSettings = false
+            controller.popoverDidClose(Notification(name: NSPopover.didCloseNotification))
+            check(!testManager.showingSettings, "popoverDidClose must reset showingSettings = false")
+            check(!testManager.isPopoverOpen, "popoverDidClose must reset isPopoverOpen = false")
+
+            // Popover close with path changes resets showingSettings and triggers refresh
+            controller.openPreferences()
+            check(testManager.showingSettings)
+            testManager.claudePath = "/tmp/test-grba7-path-\(UUID().uuidString)"
+            let refreshCountBeforeClose = testManager.refreshCount
+            controller.popoverDidClose(Notification(name: NSPopover.didCloseNotification))
+            check(!testManager.showingSettings, "popoverDidClose must reset showingSettings = false")
+            for _ in 0..<50 {
+                if testManager.refreshCount > refreshCountBeforeClose { break }
+                try? await Task.sleep(nanoseconds: 20_000_000)
+            }
+            check(testManager.refreshCount > refreshCountBeforeClose, "popoverDidClose after path changes must trigger refresh")
+
+            // Also verify closePopover resets showingSettings
+            controller.openPreferences()
+            check(testManager.showingSettings)
+            controller.closePopover(nil)
+            check(!testManager.showingSettings, "closePopover must reset showingSettings = false")
+        }
+        let restoredGrba7Claude = UserDefaults.standard.object(forKey: "GravityBar_claudePath")
+        let restoredGrba7Mock = UserDefaults.standard.object(forKey: "GravityBar_isMockMode")
+        check((savedGrba7Claude == nil && restoredGrba7Claude == nil) || (savedGrba7Claude as? String == restoredGrba7Claude as? String), "UserDefaults claudePath must be restored")
+        check((savedGrba7Mock == nil && restoredGrba7Mock == nil) || (savedGrba7Mock as? Bool == restoredGrba7Mock as? Bool), "UserDefaults isMockMode must be restored")
+        print("✓ Reset showingSettings on popover close tests passed")
 
         // MARK: Live machine smoke output (informational)
         // Reads whatever is installed on this Mac. Nothing here can fail the run: on CI these sources are
