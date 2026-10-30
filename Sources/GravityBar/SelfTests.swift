@@ -737,8 +737,8 @@ enum SelfTests {
         )
         check(idleWithConfiguredInTags.models.count == OllamaProvider.installedModelPreviewLimit, "Idle Ollama must fill up to installedModelPreviewLimit rows (got \(idleWithConfiguredInTags.models.count))")
         check(idleWithConfiguredInTags.models.map(\.name) == ["qwen2.5-coder:latest", "llama3.2:latest", "mistral:latest", "phi3:latest"], "Models must include configuredModel first and de-duplicate it from installed tags")
-        check(idleWithConfiguredInTags.models[0].detail == "Codex default model", "Configured model must have 'Codex default model' detail")
-        check(idleWithConfiguredInTags.models[1].detail?.hasPrefix("installed · ") == true, "Installed models must have 'installed · ' detail")
+        check(idleWithConfiguredInTags.models.count >= 2 && idleWithConfiguredInTags.models[0].detail == "Codex default model", "Configured model must have 'Codex default model' detail")
+        check(idleWithConfiguredInTags.models.count >= 2 && idleWithConfiguredInTags.models[1].detail?.hasPrefix("installed · ") == true, "Installed models must have 'installed · ' detail")
         check(idleWithConfiguredInTags.models.allSatisfy { !$0.isRunning }, "All idle models must have isRunning == false")
         check(idleWithConfiguredInTags.planBadge == "5 models", "planBadge must reflect total installed models count")
 
@@ -750,7 +750,7 @@ enum SelfTests {
         )
         check(idleWithConfiguredNotInTags.models.count == OllamaProvider.installedModelPreviewLimit, "Idle Ollama must fill up to installedModelPreviewLimit total rows")
         check(idleWithConfiguredNotInTags.models.map(\.name) == ["deepseek-r1:cloud", "qwen2.5-coder:latest", "llama3.2:latest", "mistral:latest"], "Models must list external configuredModel then up to 3 installed models")
-        check(idleWithConfiguredNotInTags.models[0].detail == "Codex default model")
+        check(idleWithConfiguredNotInTags.models.count >= 1 && idleWithConfiguredNotInTags.models[0].detail == "Codex default model")
         check(idleWithConfiguredNotInTags.models.allSatisfy { !$0.isRunning })
 
         // Fewer installed models than preview limit
@@ -777,8 +777,44 @@ enum SelfTests {
         )
         check(runningUsage.models.count == 2, "Running Ollama must only list running models and configured model")
         check(runningUsage.models.map(\.name) == ["llama3.2:latest", "qwen2.5-coder:latest"])
-        check(runningUsage.models[0].isRunning && !runningUsage.models[1].isRunning, "Only running model in psData has isRunning == true")
+        check(runningUsage.models.count >= 2 && runningUsage.models[0].isRunning && !runningUsage.models[1].isRunning, "Only running model in psData has isRunning == true")
         print("✓ Idle Ollama installed models preview and de-duplication tests passed")
+
+        // 3w. Hide zero-token 5-hour CLI row when only 7-day CLI usage is present (GRBA-15)
+        let empty5h = TokenUsage(inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheCreationTokens: 0)
+        let active5h = TokenUsage(inputTokens: 150, outputTokens: 25, cacheReadTokens: 300, cacheCreationTokens: 0)
+        let active7d = TokenUsage(inputTokens: 10_000, outputTokens: 2_000, cacheReadTokens: 50_000, cacheCreationTokens: 0)
+
+        check(empty5h.totalTokens == 0, "empty5h totalTokens must be 0")
+        check(active5h.totalTokens > 0, "active5h totalTokens must be > 0")
+        check(active7d.totalTokens > 0, "active7d totalTokens must be > 0")
+
+        let cliCardWidth = GravityBarTokens.popoverWidth - 28
+        let baseUsage = ProviderUsage(
+            provider: .claude,
+            fiveHourMetric: UsageMetric(windowType: .fiveHour, usedPercent: 10.0, resetDate: now.addingTimeInterval(3600)),
+            weeklyMetric: UsageMetric(windowType: .weekly, usedPercent: 20.0, resetDate: now.addingTimeInterval(86400)),
+            connectionState: .connected
+        )
+
+        var usageWithNeither = baseUsage
+        usageWithNeither.cliTokenUsage = nil
+
+        var usageWith7dOnly = baseUsage
+        usageWith7dOnly.cliTokenUsage = CLITokenUsage(last5h: empty5h, last7d: active7d)
+
+        var usageWithBoth = baseUsage
+        usageWithBoth.cliTokenUsage = CLITokenUsage(last5h: active5h, last7d: active7d)
+
+        let heightNeither = NSHostingController(rootView: UsageMetricRowView(usage: usageWithNeither).frame(width: cliCardWidth)).sizeThatFits(in: CGSize(width: cliCardWidth, height: 1000)).height
+        let height7dOnly = NSHostingController(rootView: UsageMetricRowView(usage: usageWith7dOnly).frame(width: cliCardWidth)).sizeThatFits(in: CGSize(width: cliCardWidth, height: 1000)).height
+        let heightBoth = NSHostingController(rootView: UsageMetricRowView(usage: usageWithBoth).frame(width: cliCardWidth)).sizeThatFits(in: CGSize(width: cliCardWidth, height: 1000)).height
+
+        // 7d-only card must be taller than no-CLI card (proving 7d row is rendered)
+        check(height7dOnly > heightNeither, "Card with 7d CLI usage (\(height7dOnly)) must be taller than card with no CLI usage (\(heightNeither))")
+        // 7d-only card must be shorter than both-rows card (proving 0-token 5h row is omitted)
+        check(height7dOnly < heightBoth, "Card with 0-token 5h CLI row hidden (\(height7dOnly)) must be shorter than card with both rows (\(heightBoth))")
+        print("✓ Zero-token 5-hour CLI row suppression tests passed")
 
         // MARK: Live machine smoke output (informational)
         // Reads whatever is installed on this Mac. Nothing here can fail the run: on CI these sources are
