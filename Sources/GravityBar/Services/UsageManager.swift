@@ -6,7 +6,7 @@ import Combine
 public final class UsageManager: ObservableObject {
     public static let shared = UsageManager()
 
-    @Published public private(set) var providerUsages: [ProviderType: ProviderUsage] = [:]
+    @Published public internal(set) var providerUsages: [ProviderType: ProviderUsage] = [:]
     @Published public var enabledProviders: Set<ProviderType> {
         didSet {
             saveEnabledProviders()
@@ -130,7 +130,7 @@ public final class UsageManager: ObservableObject {
     }
 
     @Published public private(set) var isRefreshing: Bool = false
-    @Published public private(set) var lastUpdated: Date?
+    @Published public internal(set) var lastUpdated: Date?
     @Published public private(set) var refreshCount: Int = 0
 
     private var pollingTimer: Timer?
@@ -295,6 +295,9 @@ public final class UsageManager: ObservableObject {
     }
 
     public var overallStatusText: String {
+        guard hasReadings else {
+            return "No Active Readings"
+        }
         let pct = Int(round(maxUrgencyPercent))
         switch highestUrgency {
         case .critical:

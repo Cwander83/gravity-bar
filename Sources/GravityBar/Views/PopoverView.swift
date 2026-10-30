@@ -63,6 +63,7 @@ public struct PopoverView: View {
             // Footer
             footerView
         }
+        .fixedSize(horizontal: false, vertical: true)
     }
 
     // MARK: - Subviews
@@ -182,17 +183,19 @@ public struct PopoverView: View {
                     .stroke(GravityBarTokens.circularGaugeTrack, lineWidth: 4)
                     .frame(width: 42, height: 42)
 
-                Circle()
-                    .trim(from: 0, to: CGFloat(maxPercent / 100.0))
-                    .stroke(
-                        statusColor,
-                        style: StrokeStyle(lineWidth: 4, lineCap: .round)
-                    )
-                    .rotationEffect(.degrees(-90))
-                    .frame(width: 42, height: 42)
-                    .shadow(color: statusColor.opacity(0.35), radius: 3)
+                if manager.hasReadings {
+                    Circle()
+                        .trim(from: 0, to: CGFloat(maxPercent / 100.0))
+                        .stroke(
+                            statusColor,
+                            style: StrokeStyle(lineWidth: 4, lineCap: .round)
+                        )
+                        .rotationEffect(.degrees(-90))
+                        .frame(width: 42, height: 42)
+                        .shadow(color: statusColor.opacity(0.35), radius: 3)
+                }
 
-                Text("\(Int(round(maxPercent)))%")
+                Text(manager.hasReadings ? "\(Int(round(maxPercent)))%" : "--%")
                     .font(.system(size: 10, weight: .black, design: .monospaced))
                     .foregroundColor(.primary)
             }
