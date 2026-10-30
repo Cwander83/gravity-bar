@@ -6,6 +6,8 @@ import Combine
 public final class UsageManager: ObservableObject {
     public static let shared = UsageManager()
 
+    private let userDefaults: UserDefaults
+
     @Published public internal(set) var providerUsages: [ProviderType: ProviderUsage] = [:]
     @Published public var enabledProviders: Set<ProviderType> {
         didSet {
@@ -15,7 +17,7 @@ public final class UsageManager: ObservableObject {
 
     @Published public var isMockMode: Bool {
         didSet {
-            UserDefaults.standard.set(isMockMode, forKey: "GravityBar_isMockMode")
+            userDefaults.set(isMockMode, forKey: "GravityBar_isMockMode")
             setupProvidersIfNeeded()
             Task { await refreshAll() }
         }
@@ -24,40 +26,40 @@ public final class UsageManager: ObservableObject {
     /// Show providers that are not installed or not running. Off by default: only detected providers appear.
     @Published public var showOfflineProviders: Bool {
         didSet {
-            UserDefaults.standard.set(showOfflineProviders, forKey: "GravityBar_showOfflineProviders")
+            userDefaults.set(showOfflineProviders, forKey: "GravityBar_showOfflineProviders")
         }
     }
 
     @Published public var hoverToOpen: Bool {
         didSet {
-            UserDefaults.standard.set(hoverToOpen, forKey: "GravityBar_hoverToOpen")
+            userDefaults.set(hoverToOpen, forKey: "GravityBar_hoverToOpen")
         }
     }
 
     @Published public var pollingIntervalSeconds: TimeInterval {
         didSet {
-            UserDefaults.standard.set(pollingIntervalSeconds, forKey: "GravityBar_pollingInterval")
+            userDefaults.set(pollingIntervalSeconds, forKey: "GravityBar_pollingInterval")
             restartPolling()
         }
     }
 
     @Published public var claudePath: String {
         didSet {
-            UserDefaults.standard.set(claudePath, forKey: "GravityBar_claudePath")
+            userDefaults.set(claudePath, forKey: "GravityBar_claudePath")
             setupProvidersIfNeeded()
         }
     }
 
     @Published public var codexPath: String {
         didSet {
-            UserDefaults.standard.set(codexPath, forKey: "GravityBar_codexPath")
+            userDefaults.set(codexPath, forKey: "GravityBar_codexPath")
             setupProvidersIfNeeded()
         }
     }
 
     @Published public var geminiPath: String {
         didSet {
-            UserDefaults.standard.set(geminiPath, forKey: "GravityBar_geminiPath")
+            userDefaults.set(geminiPath, forKey: "GravityBar_geminiPath")
             setupProvidersIfNeeded()
         }
     }
@@ -145,9 +147,9 @@ public final class UsageManager: ObservableObject {
 
     internal private(set) var providers: [ProviderType: UsageProvider] = [:]
 
-    public init(startPollingImmediately: Bool = true) {
-        // Load persisted settings or fallback to defaults
-        let defaults = UserDefaults.standard
+    public init(startPollingImmediately: Bool = true, userDefaults: UserDefaults = .standard) {
+        self.userDefaults = userDefaults
+        let defaults = userDefaults
 
         if let savedProviders = defaults.array(forKey: "GravityBar_enabledProviders") as? [String] {
             // Providers added after the list was saved (e.g. Ollama) start enabled; ones the user turned off stay off
@@ -365,7 +367,7 @@ public final class UsageManager: ObservableObject {
 
     private func saveEnabledProviders() {
         let rawValues = enabledProviders.map { $0.rawValue }
-        UserDefaults.standard.set(rawValues, forKey: "GravityBar_enabledProviders")
+        userDefaults.set(rawValues, forKey: "GravityBar_enabledProviders")
     }
 
     private func startPolling() {

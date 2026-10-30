@@ -311,16 +311,34 @@ enum SelfTests {
         // 3k. URLSession reuse and provider caching (GRBA-1)
         check(AntigravityProvider.sharedSession.delegate === AntigravityProvider.sharedDelegate, "AntigravityProvider must reuse shared delegate")
         check(AntigravityProvider.sharedSession.configuration.timeoutIntervalForRequest == 1.5, "AntigravityProvider session timeout must be 1.5s")
-        check(OllamaProvider.sharedSession.configuration.timeoutIntervalForRequest == 1.5, "OllamaProvider session timeout must be 1.5s")
+        check(AntigravityProvider.sharedSession.configuration.httpCookieStorage == nil, "AntigravityProvider session must disable cookie storage")
+        check(AntigravityProvider.sharedSession.configuration.httpShouldSetCookies == false, "AntigravityProvider session must not set cookies")
+        check(AntigravityProvider.sharedSession.configuration.urlCache == nil, "AntigravityProvider session must disable URL cache")
+        check(AntigravityProvider.sharedSession.configuration.requestCachePolicy == .reloadIgnoringLocalCacheData, "AntigravityProvider session cache policy must ignore local cache")
 
+        check(OllamaProvider.sharedSession.configuration.timeoutIntervalForRequest == 1.5, "OllamaProvider session timeout must be 1.5s")
+        check(OllamaProvider.sharedSession.configuration.httpCookieStorage == nil, "OllamaProvider session must disable cookie storage")
+        check(OllamaProvider.sharedSession.configuration.httpShouldSetCookies == false, "OllamaProvider session must not set cookies")
+        check(OllamaProvider.sharedSession.configuration.urlCache == nil, "OllamaProvider session must disable URL cache")
+        check(OllamaProvider.sharedSession.configuration.requestCachePolicy == .reloadIgnoringLocalCacheData, "OllamaProvider session cache policy must ignore local cache")
+
+        #if DEBUG
         let delegateCountBefore = LocalhostTrustDelegate.instanceCount
         check(delegateCountBefore > 0, "LocalhostTrustDelegate should be initialized with shared delegate")
+        #endif
         _ = try? await AntigravityProvider().fetchUsage()
         _ = try? await AntigravityProvider().fetchUsage()
         _ = try? await AntigravityProvider().fetchUsage()
+        #if DEBUG
         check(LocalhostTrustDelegate.instanceCount == delegateCountBefore, "LocalhostTrustDelegate must not leak across polling cycles")
+        #endif
 
-        let testManager = UsageManager(startPollingImmediately: false)
+        let testDefaultsSuite = "com.gravitybar.selftests.\(UUID().uuidString)"
+        let testDefaults = UserDefaults(suiteName: testDefaultsSuite)!
+        defer {
+            testDefaults.removePersistentDomain(forName: testDefaultsSuite)
+        }
+        let testManager = UsageManager(startPollingImmediately: false, userDefaults: testDefaults)
         let initialClaude = testManager.providers[.claude]
         let initialCodex = testManager.providers[.codex]
         let initialGemini = testManager.providers[.gemini]
@@ -331,19 +349,12 @@ enum SelfTests {
         check(testManager.providers[.claude] === initialClaude as AnyObject, "UsageManager must not recreate providers when config unchanged")
         check(testManager.providers[.gemini] === initialGemini as AnyObject, "UsageManager must not recreate AntigravityProvider when config unchanged")
 
-        let savedClaudeDefault = UserDefaults.standard.object(forKey: "GravityBar_claudePath")
-        defer {
-            if let saved = savedClaudeDefault {
-                UserDefaults.standard.set(saved, forKey: "GravityBar_claudePath")
-            } else {
-                UserDefaults.standard.removeObject(forKey: "GravityBar_claudePath")
-            }
-        }
+        let realClaudeDefaultBefore = UserDefaults.standard.object(forKey: "GravityBar_claudePath")
         testManager.claudePath = "/tmp/test-claude-path"
         check(testManager.providers[.claude] !== initialClaude as AnyObject, "UsageManager must recreate ClaudeProvider when path changes")
-        if let saved = savedClaudeDefault as? String {
-            testManager.claudePath = saved
-        }
+        check(testDefaults.string(forKey: "GravityBar_claudePath") == "/tmp/test-claude-path", "UsageManager must write to injected userDefaults")
+        let realClaudeDefaultAfter = UserDefaults.standard.object(forKey: "GravityBar_claudePath")
+        check((realClaudeDefaultBefore == nil && realClaudeDefaultAfter == nil) || (realClaudeDefaultBefore as? String == realClaudeDefaultAfter as? String), "UserDefaults.standard must not be modified by testManager")
         print("✓ URLSession reuse and provider caching tests passed")
 
         // 3n. Idle timer and button update gating (GRBA-4)
