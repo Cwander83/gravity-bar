@@ -43,6 +43,9 @@ enum SelfTests {
         let in3d = now.addingTimeInterval((3 * 86400) + (14 * 3600))
         let m3 = UsageMetric(windowType: .weekly, usedPercent: 34, resetDate: in3d)
         check(m3.formattedReset(relativeTo: now) == "Resets in 3d 14h")
+
+        let mZero = UsageMetric(windowType: .fiveHour, usedPercent: 0, resetDate: in45m)
+        check(mZero.formattedReset(relativeTo: now) == "Window idle")
         print("✓ Countdown formatting tests passed")
 
         // 3. Provider Urgency Aggregation
@@ -737,8 +740,8 @@ enum SelfTests {
         )
         check(idleWithConfiguredInTags.models.count == OllamaProvider.installedModelPreviewLimit, "Idle Ollama must fill up to installedModelPreviewLimit rows (got \(idleWithConfiguredInTags.models.count))")
         check(idleWithConfiguredInTags.models.map(\.name) == ["qwen2.5-coder:latest", "llama3.2:latest", "mistral:latest", "phi3:latest"], "Models must include configuredModel first and de-duplicate it from installed tags")
-        check(idleWithConfiguredInTags.models[0].detail == "Codex default model", "Configured model must have 'Codex default model' detail")
-        check(idleWithConfiguredInTags.models[1].detail?.hasPrefix("installed · ") == true, "Installed models must have 'installed · ' detail")
+        check(idleWithConfiguredInTags.models.count >= 2 && idleWithConfiguredInTags.models[0].detail == "Codex default model", "Configured model must have 'Codex default model' detail")
+        check(idleWithConfiguredInTags.models.count >= 2 && idleWithConfiguredInTags.models[1].detail?.hasPrefix("installed · ") == true, "Installed models must have 'installed · ' detail")
         check(idleWithConfiguredInTags.models.allSatisfy { !$0.isRunning }, "All idle models must have isRunning == false")
         check(idleWithConfiguredInTags.planBadge == "5 models", "planBadge must reflect total installed models count")
 
@@ -750,7 +753,7 @@ enum SelfTests {
         )
         check(idleWithConfiguredNotInTags.models.count == OllamaProvider.installedModelPreviewLimit, "Idle Ollama must fill up to installedModelPreviewLimit total rows")
         check(idleWithConfiguredNotInTags.models.map(\.name) == ["deepseek-r1:cloud", "qwen2.5-coder:latest", "llama3.2:latest", "mistral:latest"], "Models must list external configuredModel then up to 3 installed models")
-        check(idleWithConfiguredNotInTags.models[0].detail == "Codex default model")
+        check(idleWithConfiguredNotInTags.models.count >= 1 && idleWithConfiguredNotInTags.models[0].detail == "Codex default model")
         check(idleWithConfiguredNotInTags.models.allSatisfy { !$0.isRunning })
 
         // Fewer installed models than preview limit
@@ -777,8 +780,29 @@ enum SelfTests {
         )
         check(runningUsage.models.count == 2, "Running Ollama must only list running models and configured model")
         check(runningUsage.models.map(\.name) == ["llama3.2:latest", "qwen2.5-coder:latest"])
-        check(runningUsage.models[0].isRunning && !runningUsage.models[1].isRunning, "Only running model in psData has isRunning == true")
+        check(runningUsage.models.count >= 2 && runningUsage.models[0].isRunning && !runningUsage.models[1].isRunning, "Only running model in psData has isRunning == true")
         print("✓ Idle Ollama installed models preview and de-duplication tests passed")
+
+        // 3v. Suppress fake moving reset countdown on untouched 0% quota windows (GRBA-14)
+        let zeroFiveHour = UsageMetric(windowType: .fiveHour, usedPercent: 0.0, resetDate: now.addingTimeInterval(5 * 3600))
+        check(zeroFiveHour.formattedReset(relativeTo: now) == "Window idle", "Untouched 0% 5h window must format as 'Window idle'")
+        let zeroWeekly = UsageMetric(windowType: .weekly, remainingFraction: 1.0, resetDate: now.addingTimeInterval(7 * 86400))
+        check(zeroWeekly.formattedReset(relativeTo: now) == "Window idle", "Untouched 1.0 remainingFraction weekly window must format as 'Window idle'")
+        let activeLow = UsageMetric(windowType: .fiveHour, usedPercent: 0.5, resetDate: now.addingTimeInterval(3600))
+        check(activeLow.formattedReset(relativeTo: now) == "Resets in 1h 0m", "Active window (>0%) must retain reset countdown")
+        let activeExpired = UsageMetric(windowType: .fiveHour, usedPercent: 10.0, resetDate: now.addingTimeInterval(-10))
+        check(activeExpired.formattedReset(relativeTo: now) == "Resets momentarily", "Expired active window must format as 'Resets momentarily'")
+
+        // UsageMetricRowView renders 0% window without fake countdown
+        let idleUsage = ProviderUsage(
+            provider: .claude,
+            fiveHourMetric: zeroFiveHour,
+            weeklyMetric: UsageMetric(windowType: .weekly, usedPercent: 40.0, resetDate: now.addingTimeInterval(86400)),
+            connectionState: .connected
+        )
+        let idleHc = NSHostingController(rootView: UsageMetricRowView(usage: idleUsage).frame(width: GravityBarTokens.popoverWidth - 28))
+        _ = idleHc.sizeThatFits(in: CGSize(width: GravityBarTokens.popoverWidth - 28, height: 1000))
+        print("✓ Idle window reset countdown suppression tests passed")
 
         // MARK: Live machine smoke output (informational)
         // Reads whatever is installed on this Mac. Nothing here can fail the run: on CI these sources are
