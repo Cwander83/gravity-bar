@@ -8,10 +8,8 @@ public enum GravityBarTokens {
 
     // Geometry
     public static let popoverWidth: CGFloat = 360
-    public static let popoverCornerRadius: CGFloat = 18
     public static let cardCornerRadius: CGFloat = 12
     public static let progressBarHeight: CGFloat = 7
-    public static let statusItemGaugeSize: CGFloat = 16
 
     // Colors
     public static let colorNormal = Color(red: 0.06, green: 0.73, blue: 0.51)      // #10b981
@@ -32,9 +30,5 @@ public enum GravityBarTokens {
         case .warning: return colorWarning
         case .critical: return colorCritical
         }
-    }
-
-    public static func colorFor(usedPercent: Double) -> Color {
-        colorFor(threshold: QuotaThreshold.from(usedPercent: usedPercent))
     }
 }
