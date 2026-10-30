@@ -514,6 +514,85 @@ enum SelfTests {
         check((savedGrba9HoverToOpen == nil && restoredGrba9HoverToOpen == nil) || (savedGrba9HoverToOpen as? Bool == restoredGrba9HoverToOpen as? Bool), "UserDefaults hoverToOpen must be restored")
         print("✓ Hover cancellation and click race protection tests passed")
 
+        // 3r. Empty readings status and popover scroll view sizing (GRBA-10)
+        // c1: overallStatusText neutral when !hasReadings
+        let emptyManager = UsageManager()
+        emptyManager.providerUsages = [:]
+        emptyManager.lastUpdated = nil
+        check(!emptyManager.hasReadings, "hasReadings must be false when lastUpdated is nil")
+        check(emptyManager.overallStatusText == "No Active Readings", "overallStatusText must be 'No Active Readings' when !hasReadings")
+
+        // c1: hasReadings false when providerUsages has non-detected providers
+        let undetectedUsage = ProviderUsage.unavailable(.ollama, state: .notConfigured)
+        emptyManager.providerUsages = [.ollama: undetectedUsage]
+        emptyManager.lastUpdated = Date()
+        check(!emptyManager.hasReadings, "hasReadings must be false when no providers are detected")
+        check(emptyManager.overallStatusText == "No Active Readings", "overallStatusText must be 'No Active Readings' when detectedUsages is empty")
+
+        // c1: hasReadings true when detected provider at 0%
+        let zeroUsage = ProviderUsage(
+            provider: .claude,
+            fiveHourMetric: UsageMetric(windowType: .fiveHour, usedPercent: 0.0, resetDate: now.addingTimeInterval(3600)),
+            weeklyMetric: nil,
+            connectionState: .connected
+        )
+        emptyManager.providerUsages = [.claude: zeroUsage]
+        check(emptyManager.hasReadings, "hasReadings must be true when detected provider is present")
+        check(emptyManager.overallStatusText == "Normal / Healthy (0% used)", "overallStatusText must be 'Normal / Healthy (0% used)' when 0% detected")
+
+        // c1: elevated and critical statuses when hasReadings is true
+        let elevatedUsage = ProviderUsage(
+            provider: .codex,
+            fiveHourMetric: UsageMetric(windowType: .fiveHour, usedPercent: 70.0, resetDate: now.addingTimeInterval(3600)),
+            weeklyMetric: nil,
+            connectionState: .connected
+        )
+        emptyManager.providerUsages = [.codex: elevatedUsage]
+        check(emptyManager.overallStatusText == "Elevated Usage (70% used)", "overallStatusText must be 'Elevated Usage (70% used)'")
+
+        let criticalUsage = ProviderUsage(
+            provider: .gemini,
+            fiveHourMetric: UsageMetric(windowType: .fiveHour, usedPercent: 92.0, resetDate: now.addingTimeInterval(3600)),
+            weeklyMetric: nil,
+            connectionState: .connected
+        )
+        emptyManager.providerUsages = [.gemini: criticalUsage]
+        check(emptyManager.overallStatusText == "Critical Quota (92% used)", "overallStatusText must be 'Critical Quota (92% used)'")
+
+        // c2: PopoverView readoutView vertical sizing fits content up to maxHeight: 380
+        let sizingManager = UsageManager()
+        sizingManager.enabledProviders = [.claude, .codex, .gemini, .ollama]
+        sizingManager.providerUsages = [:]
+        sizingManager.lastUpdated = Date()
+
+        let hcEmpty = NSHostingController(rootView: PopoverView(manager: sizingManager))
+        let emptySize = hcEmpty.sizeThatFits(in: CGSize(width: GravityBarTokens.popoverWidth, height: 1000))
+
+        sizingManager.providerUsages = [.claude: zeroUsage]
+        let hcOne = NSHostingController(rootView: PopoverView(manager: sizingManager))
+        let oneCardSize = hcOne.sizeThatFits(in: CGSize(width: GravityBarTokens.popoverWidth, height: 1000))
+
+        sizingManager.providerUsages = [.claude: zeroUsage, .codex: elevatedUsage]
+        let hcTwo = NSHostingController(rootView: PopoverView(manager: sizingManager))
+        let twoCardSize = hcTwo.sizeThatFits(in: CGSize(width: GravityBarTokens.popoverWidth, height: 1000))
+
+        let extraUsage = ProviderUsage(
+            provider: .ollama,
+            fiveHourMetric: UsageMetric(windowType: .fiveHour, usedPercent: 10.0, resetDate: now.addingTimeInterval(3600)),
+            weeklyMetric: nil,
+            connectionState: .connected
+        )
+        sizingManager.providerUsages = [.claude: zeroUsage, .codex: elevatedUsage, .gemini: criticalUsage, .ollama: extraUsage]
+        let hcFour = NSHostingController(rootView: PopoverView(manager: sizingManager))
+        let fourCardSize = hcFour.sizeThatFits(in: CGSize(width: GravityBarTokens.popoverWidth, height: 1000))
+
+        check(emptySize.height < fourCardSize.height, "empty height (\(emptySize.height)) must be smaller than 4 cards height (\(fourCardSize.height))")
+        check(oneCardSize.height < fourCardSize.height, "1 card height (\(oneCardSize.height)) must be smaller than 4 cards height (\(fourCardSize.height))")
+        check(oneCardSize.height < 350, "1 card height (\(oneCardSize.height)) must hug content and be well below 350pt")
+        check(twoCardSize.height > oneCardSize.height, "2 cards height (\(twoCardSize.height)) must be larger than 1 card height (\(oneCardSize.height))")
+        check(fourCardSize.height <= 560, "4 cards total height (\(fourCardSize.height)) must be capped by maxHeight 380 constraint")
+        print("✓ Empty readings status and popover scroll view sizing tests passed")
+
         // MARK: Live machine smoke output (informational)
         // Reads whatever is installed on this Mac. Nothing here can fail the run: on CI these sources are
         // absent, and the deterministic fixture checks above are what gate the build.
