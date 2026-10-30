@@ -168,13 +168,8 @@ public struct UsageMetric: Identifiable, Codable, Equatable {
         QuotaThreshold.from(usedPercent: usedPercent)
     }
 
-    /// Formats time remaining until reset into a clean human string (e.g. "Resets in 1h 42m"),
-    /// or "Window idle" when the quota window is untouched at 0% usage.
+    /// Formats time remaining until reset into a clean human string (e.g. "Resets in 1h 42m").
     public func formattedReset(relativeTo now: Date = Date()) -> String {
-        guard usedPercent > 0 else {
-            return "Window idle"
-        }
-
         let diff = resetDate.timeIntervalSince(now)
         if diff <= 0 {
             return "Resets momentarily"

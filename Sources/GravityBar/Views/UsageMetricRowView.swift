@@ -245,7 +245,7 @@ public struct UsageMetricRowView: View {
             HStack(spacing: 4) {
                 Image(systemName: "clock.arrow.circlepath")
                     .font(.system(size: 9))
-                Text(metric.formattedReset())
+                Text(metric.usedPercent <= 0 ? "Window idle" : metric.formattedReset())
                     .font(.system(size: 10, weight: .medium))
             }
             .foregroundColor(.secondary)

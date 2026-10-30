@@ -43,9 +43,6 @@ enum SelfTests {
         let in3d = now.addingTimeInterval((3 * 86400) + (14 * 3600))
         let m3 = UsageMetric(windowType: .weekly, usedPercent: 34, resetDate: in3d)
         check(m3.formattedReset(relativeTo: now) == "Resets in 3d 14h")
-
-        let mZero = UsageMetric(windowType: .fiveHour, usedPercent: 0, resetDate: in45m)
-        check(mZero.formattedReset(relativeTo: now) == "Window idle")
         print("✓ Countdown formatting tests passed")
 
         // 3. Provider Urgency Aggregation
@@ -784,24 +781,51 @@ enum SelfTests {
         print("✓ Idle Ollama installed models preview and de-duplication tests passed")
 
         // 3v. Suppress fake moving reset countdown on untouched 0% quota windows (GRBA-14)
-        let zeroFiveHour = UsageMetric(windowType: .fiveHour, usedPercent: 0.0, resetDate: now.addingTimeInterval(5 * 3600))
-        check(zeroFiveHour.formattedReset(relativeTo: now) == "Window idle", "Untouched 0% 5h window must format as 'Window idle'")
-        let zeroWeekly = UsageMetric(windowType: .weekly, remainingFraction: 1.0, resetDate: now.addingTimeInterval(7 * 86400))
-        check(zeroWeekly.formattedReset(relativeTo: now) == "Window idle", "Untouched 1.0 remainingFraction weekly window must format as 'Window idle'")
-        let activeLow = UsageMetric(windowType: .fiveHour, usedPercent: 0.5, resetDate: now.addingTimeInterval(3600))
-        check(activeLow.formattedReset(relativeTo: now) == "Resets in 1h 0m", "Active window (>0%) must retain reset countdown")
-        let activeExpired = UsageMetric(windowType: .fiveHour, usedPercent: 10.0, resetDate: now.addingTimeInterval(-10))
-        check(activeExpired.formattedReset(relativeTo: now) == "Resets momentarily", "Expired active window must format as 'Resets momentarily'")
+        // formattedReset remains a pure time formatter for active or synthetic metrics
+        let futureReset = now.addingTimeInterval(3600)
+        let activeMetric = UsageMetric(windowType: .fiveHour, usedPercent: 42.0, resetDate: futureReset)
+        check(activeMetric.formattedReset(relativeTo: now) == "Resets in 1h 0m", "Active window must format countdown")
 
-        // UsageMetricRowView renders 0% window without fake countdown
-        let idleUsage = ProviderUsage(
+        let expiredMetric = UsageMetric(windowType: .fiveHour, usedPercent: 10.0, resetDate: now.addingTimeInterval(-10))
+        check(expiredMetric.formattedReset(relativeTo: now) == "Resets momentarily", "Expired window must format as 'Resets momentarily'")
+
+        // Regression check: nextResetCountdownText with detected usage >0% must start with "Resets in"
+        let resetTestManager = UsageManager(startPollingImmediately: false)
+        let singleUsage = ProviderUsage(
             provider: .claude,
-            fiveHourMetric: zeroFiveHour,
+            fiveHourMetric: UsageMetric(windowType: .fiveHour, usedPercent: 50.0, resetDate: now.addingTimeInterval((2 * 3600) + (10 * 60))),
+            weeklyMetric: nil,
+            connectionState: .connected
+        )
+        resetTestManager.providerUsages = [.claude: singleUsage]
+        check(resetTestManager.nextResetCountdownText.hasPrefix("Resets in"), "nextResetCountdownText must start with 'Resets in' when active usage has pending reset (got \(resetTestManager.nextResetCountdownText))")
+
+        // When all detected windows are untouched at 0%, nextResetCountdownText must report "None pending"
+        let zeroUsage = ProviderUsage(
+            provider: .claude,
+            fiveHourMetric: UsageMetric(windowType: .fiveHour, usedPercent: 0.0, resetDate: now.addingTimeInterval(5 * 3600)),
+            weeklyMetric: UsageMetric(windowType: .weekly, usedPercent: 0.0, resetDate: now.addingTimeInterval(7 * 86400)),
+            connectionState: .connected
+        )
+        resetTestManager.providerUsages = [.claude: zeroUsage]
+        check(resetTestManager.nextResetCountdownText == "None pending", "nextResetCountdownText must be 'None pending' when all windows are 0%")
+
+        // UsageMetricRowView renders "Window idle" without changing card height
+        let idleCardUsage = ProviderUsage(
+            provider: .claude,
+            fiveHourMetric: UsageMetric(windowType: .fiveHour, usedPercent: 0.0, resetDate: now.addingTimeInterval(5 * 3600)),
             weeklyMetric: UsageMetric(windowType: .weekly, usedPercent: 40.0, resetDate: now.addingTimeInterval(86400)),
             connectionState: .connected
         )
-        let idleHc = NSHostingController(rootView: UsageMetricRowView(usage: idleUsage).frame(width: GravityBarTokens.popoverWidth - 28))
-        _ = idleHc.sizeThatFits(in: CGSize(width: GravityBarTokens.popoverWidth - 28, height: 1000))
+        let activeCardUsage = ProviderUsage(
+            provider: .claude,
+            fiveHourMetric: UsageMetric(windowType: .fiveHour, usedPercent: 20.0, resetDate: now.addingTimeInterval(5 * 3600)),
+            weeklyMetric: UsageMetric(windowType: .weekly, usedPercent: 40.0, resetDate: now.addingTimeInterval(86400)),
+            connectionState: .connected
+        )
+        let idleHeight = NSHostingController(rootView: UsageMetricRowView(usage: idleCardUsage).frame(width: cardWidth)).sizeThatFits(in: CGSize(width: cardWidth, height: 1000)).height
+        let activeHeight = NSHostingController(rootView: UsageMetricRowView(usage: activeCardUsage).frame(width: cardWidth)).sizeThatFits(in: CGSize(width: cardWidth, height: 1000)).height
+        check(idleHeight == activeHeight, "Card height with 'Window idle' (\(idleHeight)) must match card height with active countdown (\(activeHeight))")
         print("✓ Idle window reset countdown suppression tests passed")
 
         // MARK: Live machine smoke output (informational)
