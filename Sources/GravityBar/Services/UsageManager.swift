@@ -131,6 +131,7 @@ public final class UsageManager: ObservableObject {
     @Published public private(set) var isRefreshing: Bool = false
     @Published public internal(set) var lastUpdated: Date?
     @Published public private(set) var refreshCount: Int = 0
+    internal private(set) var refreshPassesStarted: Int = 0
 
     private var activeRefreshTask: Task<Void, Never>?
     private var refreshRequestedDuringFlight: Bool = false
@@ -269,6 +270,7 @@ public final class UsageManager: ObservableObject {
         let toFetch = ProviderType.allCases
             .filter { self.enabledProviders.contains($0) }
             .compactMap { type in self.providers[type].map { (type, $0) } }
+        refreshPassesStarted += 1
 
         let results = await withTaskGroup(of: (ProviderType, ProviderUsage).self) { group in
             for (providerType, provider) in toFetch {

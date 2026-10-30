@@ -651,13 +651,14 @@ enum SelfTests {
             trailingManager.isMockMode = true
             trailingManager.enabledProviders = [.claude]
 
+            let passCountBefore = trailingManager.refreshPassesStarted
             // Start in-flight refresh for just .claude
             let refreshTask = Task {
                 await trailingManager.refreshAll()
             }
 
-            // Yield until refresh is actively running
-            while !trailingManager.isRefreshing {
+            // Yield until the first pass has actually started and captured toFetch
+            while trailingManager.refreshPassesStarted == passCountBefore {
                 await Task.yield()
             }
             check(trailingManager.isRefreshing, "trailingManager must enter isRefreshing")
