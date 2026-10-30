@@ -133,6 +133,7 @@ public final class UsageManager: ObservableObject {
     @Published public private(set) var refreshCount: Int = 0
 
     private var activeRefreshTask: Task<Void, Never>?
+    private var refreshRequestedDuringFlight: Bool = false
     private var pollingTimer: Timer?
     private var countdownTimer: Timer?
 
@@ -231,54 +232,69 @@ public final class UsageManager: ObservableObject {
 
     public func refreshAll() async {
         if let currentTask = activeRefreshTask {
+            refreshRequestedDuringFlight = true
             await currentTask.value
             return
         }
 
         isRefreshing = true
+        refreshRequestedDuringFlight = false
+
         let refreshTask = Task { @MainActor [weak self] in
             guard let self = self else { return }
             defer {
                 self.isRefreshing = false
                 self.activeRefreshTask = nil
+                self.refreshRequestedDuringFlight = false
             }
-            self.setupProvidersIfNeeded()
 
-            // Fetch all enabled providers in parallel. fetchUsage is nonisolated async, so child tasks run off the
-            // main actor; only the result assignment below happens on it.
-            let toFetch = ProviderType.allCases
-                .filter { self.enabledProviders.contains($0) }
-                .compactMap { type in self.providers[type].map { (type, $0) } }
-
-            let results = await withTaskGroup(of: (ProviderType, ProviderUsage).self) { group in
-                for (providerType, provider) in toFetch {
-                    group.addTask {
-                        do {
-                            return (providerType, try await provider.fetchUsage())
-                        } catch {
-                            // Surface the failure instead of fabricating 0% with fake reset timers
-                            return (providerType, .unavailable(providerType, state: .error(error.localizedDescription)))
-                        }
-                    }
+            while true {
+                await self.performRefreshOnce()
+                if !self.refreshRequestedDuringFlight {
+                    break
                 }
-
-                var collected: [ProviderType: ProviderUsage] = [:]
-                for await (providerType, usage) in group {
-                    collected[providerType] = usage
-                }
-                return collected
+                self.refreshRequestedDuringFlight = false
             }
-
-            for (providerType, usage) in results {
-                self.providerUsages[providerType] = usage
-            }
-
-            self.lastUpdated = Date()
-            self.refreshCount += 1
         }
 
         self.activeRefreshTask = refreshTask
         await refreshTask.value
+    }
+
+    private func performRefreshOnce() async {
+        setupProvidersIfNeeded()
+
+        // Fetch all enabled providers in parallel. fetchUsage is nonisolated async, so child tasks run off the
+        // main actor; only the result assignment below happens on it.
+        let toFetch = ProviderType.allCases
+            .filter { self.enabledProviders.contains($0) }
+            .compactMap { type in self.providers[type].map { (type, $0) } }
+
+        let results = await withTaskGroup(of: (ProviderType, ProviderUsage).self) { group in
+            for (providerType, provider) in toFetch {
+                group.addTask {
+                    do {
+                        return (providerType, try await provider.fetchUsage())
+                    } catch {
+                        // Surface the failure instead of fabricating 0% with fake reset timers
+                        return (providerType, .unavailable(providerType, state: .error(error.localizedDescription)))
+                    }
+                }
+            }
+
+            var collected: [ProviderType: ProviderUsage] = [:]
+            for await (providerType, usage) in group {
+                collected[providerType] = usage
+            }
+            return collected
+        }
+
+        for (providerType, usage) in results {
+            self.providerUsages[providerType] = usage
+        }
+
+        self.lastUpdated = Date()
+        self.refreshCount += 1
     }
 
     /// Enabled providers shown in the popover: detected ones, plus offline ones when Show Offline Providers is on.
