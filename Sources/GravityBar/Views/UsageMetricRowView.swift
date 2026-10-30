@@ -180,7 +180,9 @@ public struct UsageMetricRowView: View {
                 .font(.system(size: 9, weight: .black))
                 .foregroundColor(.secondary)
 
-            tokenRow(label: "Last 5h", usage: cli.last5h)
+            if cli.last5h.totalTokens > 0 {
+                tokenRow(label: "Last 5h", usage: cli.last5h)
+            }
             tokenRow(label: "Last 7d", usage: cli.last7d)
         }
     }
