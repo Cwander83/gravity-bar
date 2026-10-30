@@ -5,6 +5,7 @@ import AppKit
 @MainActor
 public struct PopoverView: View {
     @ObservedObject var manager: UsageManager
+    @State private var isSpinning: Bool = false
 
     public init(manager: UsageManager) {
         self.manager = manager
@@ -28,6 +29,7 @@ public struct PopoverView: View {
         }
         .animation(.easeInOut(duration: 0.2), value: manager.showingSettings)
         .frame(width: GravityBarTokens.popoverWidth)
+        .clipped()
         .background(VisualEffectView(material: .popover, blendingMode: .behindWindow))
     }
 
@@ -62,6 +64,7 @@ public struct PopoverView: View {
             // Footer
             footerView
         }
+        .fixedSize(horizontal: false, vertical: true)
     }
 
     // MARK: - Subviews
@@ -116,23 +119,25 @@ public struct PopoverView: View {
                 // Refresh Button
                 Button(action: {
                     withAnimation(.linear(duration: 0.7)) {
-                        manager.isSpinning = true
+                        isSpinning = true
                     }
                     Task {
                         await manager.refreshAll()
                         try? await Task.sleep(nanoseconds: 700_000_000)
-                        manager.isSpinning = false
+                        isSpinning = false
                     }
                 }) {
                     Image(systemName: "arrow.triangle.2.circlepath")
                         .font(.system(size: 12, weight: .semibold))
                         .foregroundColor(.secondary)
-                        .rotationEffect(.degrees(manager.isSpinning ? 360 : 0))
+                        .rotationEffect(.degrees(isSpinning ? 360 : 0))
                         .frame(width: 26, height: 26)
-                        .background(Color.white.opacity(0.06))
+                        .background(GravityBarTokens.buttonBackground)
                         .cornerRadius(6)
                 }
                 .buttonStyle(.plain)
+                .disabled(manager.isRefreshing)
+                .help("Refresh")
 
                 // Preferences Gear
                 Button(action: { manager.showingSettings = true }) {
@@ -140,10 +145,11 @@ public struct PopoverView: View {
                         .font(.system(size: 12, weight: .semibold))
                         .foregroundColor(.secondary)
                         .frame(width: 26, height: 26)
-                        .background(Color.white.opacity(0.06))
+                        .background(GravityBarTokens.buttonBackground)
                         .cornerRadius(6)
                 }
                 .buttonStyle(.plain)
+                .help("Preferences")
             }
         }
         .padding(.horizontal, 14)
@@ -178,20 +184,22 @@ public struct PopoverView: View {
             // Circular Progress Indicator
             ZStack {
                 Circle()
-                    .stroke(Color.white.opacity(0.09), lineWidth: 4)
+                    .stroke(GravityBarTokens.circularGaugeTrack, lineWidth: 4)
                     .frame(width: 42, height: 42)
 
-                Circle()
-                    .trim(from: 0, to: CGFloat(maxPercent / 100.0))
-                    .stroke(
-                        statusColor,
-                        style: StrokeStyle(lineWidth: 4, lineCap: .round)
-                    )
-                    .rotationEffect(.degrees(-90))
-                    .frame(width: 42, height: 42)
-                    .shadow(color: statusColor.opacity(0.35), radius: 3)
+                if manager.hasReadings {
+                    Circle()
+                        .trim(from: 0, to: CGFloat(maxPercent / 100.0))
+                        .stroke(
+                            statusColor,
+                            style: StrokeStyle(lineWidth: 4, lineCap: .round)
+                        )
+                        .rotationEffect(.degrees(-90))
+                        .frame(width: 42, height: 42)
+                        .shadow(color: statusColor.opacity(0.35), radius: 3)
+                }
 
-                Text("\(Int(round(maxPercent)))%")
+                Text(manager.hasReadings ? "\(Int(round(maxPercent)))%" : "--%")
                     .font(.system(size: 10, weight: .black, design: .monospaced))
                     .foregroundColor(.primary)
             }
@@ -203,7 +211,7 @@ public struct PopoverView: View {
         )
         .overlay(
             RoundedRectangle(cornerRadius: GravityBarTokens.cardCornerRadius)
-                .stroke(Color.white.opacity(0.09), lineWidth: 1)
+                .stroke(GravityBarTokens.cardBorder, lineWidth: 1)
         )
         .padding(.horizontal, 14)
         .padding(.top, 10)

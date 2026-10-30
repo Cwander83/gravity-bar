@@ -81,7 +81,7 @@ public struct SettingsView: View {
 
                             providerToggleRow(
                                 title: "Antigravity / Gemini",
-                                subtitle: "Session RPM and quota limits",
+                                subtitle: "Per-group 5-hour and weekly quotas",
                                 isEnabled: manager.enabledProviders.contains(.gemini)
                             ) {
                                 manager.toggleProvider(.gemini)

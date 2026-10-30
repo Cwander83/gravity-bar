@@ -20,6 +20,10 @@ public final class OllamaProvider: UsageProvider {
     static let sharedSession: URLSession = {
         let sessionConfig = URLSessionConfiguration.ephemeral
         sessionConfig.timeoutIntervalForRequest = 1.5
+        sessionConfig.httpCookieStorage = nil
+        sessionConfig.httpShouldSetCookies = false
+        sessionConfig.urlCache = nil
+        sessionConfig.requestCachePolicy = .reloadIgnoringLocalCacheData
         return URLSession(configuration: sessionConfig)
     }()
 
@@ -63,21 +67,26 @@ public final class OllamaProvider: UsageProvider {
                 : "running"
             return ActiveModel(name: name, detail: detail, isRunning: true)
         }
+        let hasRunningModels = !active.isEmpty
 
         if let configuredModel, !active.contains(where: { $0.name == configuredModel }) {
             active.append(ActiveModel(name: configuredModel, detail: "Codex default model"))
         }
 
-        // Nothing loaded and no Codex default: list a few installed models so the card isn't empty
-        if active.isEmpty {
-            active = installed.prefix(installedModelPreviewLimit).compactMap { model -> ActiveModel? in
-                guard let name = model["name"] as? String else { return nil }
+        // When no models are running in VRAM, fill up to installedModelPreviewLimit total rows with installed models
+        if !hasRunningModels {
+            for model in installed {
+                guard active.count < installedModelPreviewLimit else { break }
+                guard let name = model["name"] as? String else { continue }
+                if active.contains(where: { $0.name == name }) {
+                    continue
+                }
                 let size = (model["size"] as? NSNumber)?.int64Value ?? 0
                 // Cloud models report a tiny placeholder size, so only show sizes for real local weights
                 let detail = size >= 1_000_000
                     ? "installed · \(ByteCountFormatter.string(fromByteCount: size, countStyle: .file))"
                     : "installed"
-                return ActiveModel(name: name, detail: detail)
+                active.append(ActiveModel(name: name, detail: detail))
             }
         }
 

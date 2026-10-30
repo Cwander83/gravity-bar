@@ -6,7 +6,9 @@ import Combine
 public final class UsageManager: ObservableObject {
     public static let shared = UsageManager()
 
-    @Published public private(set) var providerUsages: [ProviderType: ProviderUsage] = [:]
+    private let userDefaults: UserDefaults
+
+    @Published public internal(set) var providerUsages: [ProviderType: ProviderUsage] = [:]
     @Published public var enabledProviders: Set<ProviderType> {
         didSet {
             saveEnabledProviders()
@@ -15,7 +17,7 @@ public final class UsageManager: ObservableObject {
 
     @Published public var isMockMode: Bool {
         didSet {
-            UserDefaults.standard.set(isMockMode, forKey: "GravityBar_isMockMode")
+            userDefaults.set(isMockMode, forKey: "GravityBar_isMockMode")
             setupProvidersIfNeeded()
             Task { await refreshAll() }
         }
@@ -24,40 +26,40 @@ public final class UsageManager: ObservableObject {
     /// Show providers that are not installed or not running. Off by default: only detected providers appear.
     @Published public var showOfflineProviders: Bool {
         didSet {
-            UserDefaults.standard.set(showOfflineProviders, forKey: "GravityBar_showOfflineProviders")
+            userDefaults.set(showOfflineProviders, forKey: "GravityBar_showOfflineProviders")
         }
     }
 
     @Published public var hoverToOpen: Bool {
         didSet {
-            UserDefaults.standard.set(hoverToOpen, forKey: "GravityBar_hoverToOpen")
+            userDefaults.set(hoverToOpen, forKey: "GravityBar_hoverToOpen")
         }
     }
 
     @Published public var pollingIntervalSeconds: TimeInterval {
         didSet {
-            UserDefaults.standard.set(pollingIntervalSeconds, forKey: "GravityBar_pollingInterval")
+            userDefaults.set(pollingIntervalSeconds, forKey: "GravityBar_pollingInterval")
             restartPolling()
         }
     }
 
     @Published public var claudePath: String {
         didSet {
-            UserDefaults.standard.set(claudePath, forKey: "GravityBar_claudePath")
+            userDefaults.set(claudePath, forKey: "GravityBar_claudePath")
             setupProvidersIfNeeded()
         }
     }
 
     @Published public var codexPath: String {
         didSet {
-            UserDefaults.standard.set(codexPath, forKey: "GravityBar_codexPath")
+            userDefaults.set(codexPath, forKey: "GravityBar_codexPath")
             setupProvidersIfNeeded()
         }
     }
 
     @Published public var geminiPath: String {
         didSet {
-            UserDefaults.standard.set(geminiPath, forKey: "GravityBar_geminiPath")
+            userDefaults.set(geminiPath, forKey: "GravityBar_geminiPath")
             setupProvidersIfNeeded()
         }
     }
@@ -112,7 +114,6 @@ public final class UsageManager: ObservableObject {
         }
     }
 
-    @Published public var isSpinning: Bool = false
     @Published public var isPopoverOpen: Bool = false {
         didSet {
             guard isPopoverOpen != oldValue else { return }
@@ -130,9 +131,12 @@ public final class UsageManager: ObservableObject {
     }
 
     @Published public private(set) var isRefreshing: Bool = false
-    @Published public private(set) var lastUpdated: Date?
+    @Published public internal(set) var lastUpdated: Date?
     @Published public private(set) var refreshCount: Int = 0
+    internal private(set) var refreshPassesStarted: Int = 0
 
+    private var activeRefreshTask: Task<Void, Never>?
+    private var refreshRequestedDuringFlight: Bool = false
     private var pollingTimer: Timer?
     private var countdownTimer: Timer?
 
@@ -143,9 +147,9 @@ public final class UsageManager: ObservableObject {
 
     internal private(set) var providers: [ProviderType: UsageProvider] = [:]
 
-    public init(startPollingImmediately: Bool = true) {
-        // Load persisted settings or fallback to defaults
-        let defaults = UserDefaults.standard
+    public init(startPollingImmediately: Bool = true, userDefaults: UserDefaults = .standard) {
+        self.userDefaults = userDefaults
+        let defaults = userDefaults
 
         if let savedProviders = defaults.array(forKey: "GravityBar_enabledProviders") as? [String] {
             // Providers added after the list was saved (e.g. Ollama) start enabled; ones the user turned off stay off
@@ -230,14 +234,45 @@ public final class UsageManager: ObservableObject {
     }
 
     public func refreshAll() async {
+        if let currentTask = activeRefreshTask {
+            refreshRequestedDuringFlight = true
+            await currentTask.value
+            return
+        }
+
         isRefreshing = true
+        refreshRequestedDuringFlight = false
+
+        let refreshTask = Task { @MainActor [weak self] in
+            guard let self = self else { return }
+            defer {
+                self.isRefreshing = false
+                self.activeRefreshTask = nil
+                self.refreshRequestedDuringFlight = false
+            }
+
+            while true {
+                await self.performRefreshOnce()
+                if !self.refreshRequestedDuringFlight {
+                    break
+                }
+                self.refreshRequestedDuringFlight = false
+            }
+        }
+
+        self.activeRefreshTask = refreshTask
+        await refreshTask.value
+    }
+
+    private func performRefreshOnce() async {
         setupProvidersIfNeeded()
 
         // Fetch all enabled providers in parallel. fetchUsage is nonisolated async, so child tasks run off the
         // main actor; only the result assignment below happens on it.
         let toFetch = ProviderType.allCases
-            .filter { enabledProviders.contains($0) }
-            .compactMap { type in providers[type].map { (type, $0) } }
+            .filter { self.enabledProviders.contains($0) }
+            .compactMap { type in self.providers[type].map { (type, $0) } }
+        refreshPassesStarted += 1
 
         let results = await withTaskGroup(of: (ProviderType, ProviderUsage).self) { group in
             for (providerType, provider) in toFetch {
@@ -259,12 +294,11 @@ public final class UsageManager: ObservableObject {
         }
 
         for (providerType, usage) in results {
-            providerUsages[providerType] = usage
+            self.providerUsages[providerType] = usage
         }
 
-        lastUpdated = Date()
-        refreshCount += 1
-        isRefreshing = false
+        self.lastUpdated = Date()
+        self.refreshCount += 1
     }
 
     /// Enabled providers shown in the popover: detected ones, plus offline ones when Show Offline Providers is on.
@@ -295,6 +329,9 @@ public final class UsageManager: ObservableObject {
     }
 
     public var overallStatusText: String {
+        guard hasReadings else {
+            return "No Active Readings"
+        }
         let pct = Int(round(maxUrgencyPercent))
         switch highestUrgency {
         case .critical:
@@ -313,7 +350,9 @@ public final class UsageManager: ObservableObject {
         guard let earliest = allMetrics.map({ $0.resetDate }).filter({ $0 > Date() }).min() else {
             return "None pending"
         }
-        let metric = UsageMetric(windowType: .fiveHour, usedPercent: 0, resetDate: earliest)
+        guard let metric = allMetrics.first(where: { $0.resetDate == earliest }) else {
+            return "None pending"
+        }
         return metric.formattedReset()
     }
 
@@ -328,7 +367,7 @@ public final class UsageManager: ObservableObject {
 
     private func saveEnabledProviders() {
         let rawValues = enabledProviders.map { $0.rawValue }
-        UserDefaults.standard.set(rawValues, forKey: "GravityBar_enabledProviders")
+        userDefaults.set(rawValues, forKey: "GravityBar_enabledProviders")
     }
 
     private func startPolling() {

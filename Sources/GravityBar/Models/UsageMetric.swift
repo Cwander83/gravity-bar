@@ -8,9 +8,9 @@ public enum QuotaThreshold: String, Codable, CaseIterable, Comparable {
 
     /// Classifies a consumption level. `usedPercent` is always percentage USED (0 = untouched, 100 = exhausted).
     public static func from(usedPercent: Double) -> QuotaThreshold {
-        if usedPercent > 85.0 {
+        if usedPercent > GravityBarTokens.thresholdWarningLimit {
             return .critical
-        } else if usedPercent >= 60.0 {
+        } else if usedPercent >= GravityBarTokens.thresholdNormalLimit {
             return .warning
         } else {
             return .normal
@@ -47,20 +47,15 @@ public enum ProviderType: String, Codable, CaseIterable, Identifiable {
     public var id: String { rawValue }
 
     /// User-facing name; Codex also covers ChatGPT, which shares the OpenAI account limits.
-    public var displayName: String {
-        switch self {
+    public static func displayName(for type: ProviderType) -> String {
+        switch type {
         case .codex: return "Codex / ChatGPT"
-        default: return rawValue
+        default: return type.rawValue
         }
     }
 
-    public var iconSymbol: String {
-        switch self {
-        case .claude: return "c.circle.fill"
-        case .codex: return "bolt.circle.fill"
-        case .gemini: return "sparkles"
-        case .ollama: return "cpu"
-        }
+    public var displayName: String {
+        Self.displayName(for: self)
     }
 }
 

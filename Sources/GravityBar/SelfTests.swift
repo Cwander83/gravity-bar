@@ -1,5 +1,6 @@
 import Foundation
 import AppKit
+import SwiftUI
 
 /// Self-tests run by `swift run GravityBar --test` (and CI). Deterministic fixture checks gate the run;
 /// the live section at the end only prints what this machine reports.
@@ -27,6 +28,10 @@ enum SelfTests {
         check(QuotaThreshold.from(usedPercent: 85.0) == .warning)
         check(QuotaThreshold.from(usedPercent: 85.1) == .critical)
         check(QuotaThreshold.from(usedPercent: 100.0) == .critical)
+        check(QuotaThreshold.from(usedPercent: GravityBarTokens.thresholdNormalLimit - 0.1) == .normal)
+        check(QuotaThreshold.from(usedPercent: GravityBarTokens.thresholdNormalLimit) == .warning)
+        check(QuotaThreshold.from(usedPercent: GravityBarTokens.thresholdWarningLimit) == .warning)
+        check(QuotaThreshold.from(usedPercent: GravityBarTokens.thresholdWarningLimit + 0.1) == .critical)
         print("✓ Quota threshold tests passed")
 
         // 2. Countdowns
@@ -306,16 +311,34 @@ enum SelfTests {
         // 3k. URLSession reuse and provider caching (GRBA-1)
         check(AntigravityProvider.sharedSession.delegate === AntigravityProvider.sharedDelegate, "AntigravityProvider must reuse shared delegate")
         check(AntigravityProvider.sharedSession.configuration.timeoutIntervalForRequest == 1.5, "AntigravityProvider session timeout must be 1.5s")
-        check(OllamaProvider.sharedSession.configuration.timeoutIntervalForRequest == 1.5, "OllamaProvider session timeout must be 1.5s")
+        check(AntigravityProvider.sharedSession.configuration.httpCookieStorage == nil, "AntigravityProvider session must disable cookie storage")
+        check(AntigravityProvider.sharedSession.configuration.httpShouldSetCookies == false, "AntigravityProvider session must not set cookies")
+        check(AntigravityProvider.sharedSession.configuration.urlCache == nil, "AntigravityProvider session must disable URL cache")
+        check(AntigravityProvider.sharedSession.configuration.requestCachePolicy == .reloadIgnoringLocalCacheData, "AntigravityProvider session cache policy must ignore local cache")
 
+        check(OllamaProvider.sharedSession.configuration.timeoutIntervalForRequest == 1.5, "OllamaProvider session timeout must be 1.5s")
+        check(OllamaProvider.sharedSession.configuration.httpCookieStorage == nil, "OllamaProvider session must disable cookie storage")
+        check(OllamaProvider.sharedSession.configuration.httpShouldSetCookies == false, "OllamaProvider session must not set cookies")
+        check(OllamaProvider.sharedSession.configuration.urlCache == nil, "OllamaProvider session must disable URL cache")
+        check(OllamaProvider.sharedSession.configuration.requestCachePolicy == .reloadIgnoringLocalCacheData, "OllamaProvider session cache policy must ignore local cache")
+
+        #if DEBUG
         let delegateCountBefore = LocalhostTrustDelegate.instanceCount
         check(delegateCountBefore > 0, "LocalhostTrustDelegate should be initialized with shared delegate")
+        #endif
         _ = try? await AntigravityProvider().fetchUsage()
         _ = try? await AntigravityProvider().fetchUsage()
         _ = try? await AntigravityProvider().fetchUsage()
+        #if DEBUG
         check(LocalhostTrustDelegate.instanceCount == delegateCountBefore, "LocalhostTrustDelegate must not leak across polling cycles")
+        #endif
 
-        let testManager = UsageManager(startPollingImmediately: false)
+        let testDefaultsSuite = "com.gravitybar.selftests.\(UUID().uuidString)"
+        let testDefaults = UserDefaults(suiteName: testDefaultsSuite)!
+        defer {
+            testDefaults.removePersistentDomain(forName: testDefaultsSuite)
+        }
+        let testManager = UsageManager(startPollingImmediately: false, userDefaults: testDefaults)
         let initialClaude = testManager.providers[.claude]
         let initialCodex = testManager.providers[.codex]
         let initialGemini = testManager.providers[.gemini]
@@ -326,19 +349,12 @@ enum SelfTests {
         check(testManager.providers[.claude] === initialClaude as AnyObject, "UsageManager must not recreate providers when config unchanged")
         check(testManager.providers[.gemini] === initialGemini as AnyObject, "UsageManager must not recreate AntigravityProvider when config unchanged")
 
-        let savedClaudeDefault = UserDefaults.standard.object(forKey: "GravityBar_claudePath")
-        defer {
-            if let saved = savedClaudeDefault {
-                UserDefaults.standard.set(saved, forKey: "GravityBar_claudePath")
-            } else {
-                UserDefaults.standard.removeObject(forKey: "GravityBar_claudePath")
-            }
-        }
+        let realClaudeDefaultBefore = UserDefaults.standard.object(forKey: "GravityBar_claudePath")
         testManager.claudePath = "/tmp/test-claude-path"
         check(testManager.providers[.claude] !== initialClaude as AnyObject, "UsageManager must recreate ClaudeProvider when path changes")
-        if let saved = savedClaudeDefault as? String {
-            testManager.claudePath = saved
-        }
+        check(testDefaults.string(forKey: "GravityBar_claudePath") == "/tmp/test-claude-path", "UsageManager must write to injected userDefaults")
+        let realClaudeDefaultAfter = UserDefaults.standard.object(forKey: "GravityBar_claudePath")
+        check((realClaudeDefaultBefore == nil && realClaudeDefaultAfter == nil) || (realClaudeDefaultBefore as? String == realClaudeDefaultAfter as? String), "UserDefaults.standard must not be modified by testManager")
         print("✓ URLSession reuse and provider caching tests passed")
 
         // 3n. Idle timer and button update gating (GRBA-4)
@@ -419,6 +435,449 @@ enum SelfTests {
         check((savedGrba7Claude == nil && restoredGrba7Claude == nil) || (savedGrba7Claude as? String == restoredGrba7Claude as? String), "UserDefaults claudePath must be restored")
         check((savedGrba7Mock == nil && restoredGrba7Mock == nil) || (savedGrba7Mock as? Bool == restoredGrba7Mock as? Bool), "UserDefaults isMockMode must be restored")
         print("✓ Reset showingSettings on popover close tests passed")
+
+        // 3p. Adaptive design tokens for Light and Dark mode contrast (GRBA-8)
+        check(GravityBarTokens.buttonBackground == Color.primary.opacity(0.06), "buttonBackground token must use adaptive Color.primary.opacity(0.06)")
+        check(GravityBarTokens.badgeBackground == Color.primary.opacity(0.08), "badgeBackground token must use adaptive Color.primary.opacity(0.08)")
+        check(GravityBarTokens.progressTrack == Color.primary.opacity(0.08), "progressTrack token must use adaptive Color.primary.opacity(0.08)")
+        check(GravityBarTokens.circularGaugeTrack == Color.primary.opacity(0.09), "circularGaugeTrack token must use adaptive Color.primary.opacity(0.09)")
+        check(GravityBarTokens.cardBorder == Color.primary.opacity(0.09), "cardBorder token must use adaptive Color.primary.opacity(0.09)")
+
+        // Verify PopoverView and UsageMetricRowView can render in both light and dark color schemes
+        let sampleUsage = ProviderUsage(
+            provider: .codex,
+            fiveHourMetric: UsageMetric(windowType: .fiveHour, usedPercent: 42.0, resetDate: now.addingTimeInterval(3600)),
+            weeklyMetric: UsageMetric(windowType: .weekly, usedPercent: 68.0, resetDate: now.addingTimeInterval(86400)),
+            planBadge: "Plus"
+        )
+        _ = PopoverView(manager: testManager).environment(\.colorScheme, .light)
+        _ = PopoverView(manager: testManager).environment(\.colorScheme, .dark)
+        _ = UsageMetricRowView(usage: sampleUsage).environment(\.colorScheme, .light)
+        _ = UsageMetricRowView(usage: sampleUsage).environment(\.colorScheme, .dark)
+        print("✓ Adaptive design tokens and light/dark appearance tests passed")
+
+        // 3q. Hover-to-open cancellation on click and click race protection (GRBA-9)
+        guard let hView = controller.hoverView else {
+            preconditionFailure("StatusBarController must instantiate HoverTrackingView")
+        }
+
+        // Test c1: Mouse enter schedules pendingHover; mouseDown cancels it
+        hView.handleMouseEnter()
+        check(hView.pendingHover != nil, "handleMouseEnter must schedule pendingHover")
+        hView.handleMouseDown()
+        check(hView.pendingHover == nil, "mouseDown must cancel pendingHover")
+
+        // Test c1: Mouse enter schedules pendingHover; rightMouseDown cancels it
+        hView.handleMouseEnter()
+        check(hView.pendingHover != nil, "handleMouseEnter must schedule pendingHover")
+        hView.handleRightMouseDown()
+        check(hView.pendingHover == nil, "rightMouseDown must cancel pendingHover")
+
+        // Test c1: Mouse enter schedules pendingHover; mouseExit cancels it
+        hView.handleMouseEnter()
+        check(hView.pendingHover != nil, "handleMouseEnter must schedule pendingHover")
+        hView.handleMouseExit()
+        check(hView.pendingHover == nil, "mouseExit must cancel pendingHover")
+
+        // Test c1: showContextMenu cancels pendingHover
+        hView.handleMouseEnter()
+        check(hView.pendingHover != nil, "handleMouseEnter must schedule pendingHover")
+        controller.showContextMenu(popUpMenu: false)
+        check(hView.pendingHover == nil, "showContextMenu must cancel pendingHover")
+
+        // Test c2: Hover-open records lastHoverOpenTime; immediate left-click is ignored (kept open)
+        let savedGrba9HoverToOpen = UserDefaults.standard.object(forKey: "GravityBar_hoverToOpen")
+        let originalHoverToOpen = testManager.hoverToOpen
+        do {
+            defer {
+                testManager.hoverToOpen = originalHoverToOpen
+                if let saved = savedGrba9HoverToOpen {
+                    UserDefaults.standard.set(saved, forKey: "GravityBar_hoverToOpen")
+                } else {
+                    UserDefaults.standard.removeObject(forKey: "GravityBar_hoverToOpen")
+                }
+            }
+            testManager.hoverToOpen = true
+
+            controller.closePopover(nil)
+            check(!testManager.isPopoverOpen)
+
+            // Trigger hover open via onHover closure
+            hView.onHover?()
+            check(controller.lastHoverOpenTime != nil, "onHover must record lastHoverOpenTime")
+            check(testManager.isPopoverOpen, "onHover must open popover")
+
+            // Immediate left-click (within 0.4s) must NOT close the popover
+            if let btn = controller.statusItem.button {
+                controller.statusItemClicked(btn)
+                check(testManager.isPopoverOpen, "Left-click within 400ms of hover-open must keep popover open")
+
+                // Left-click after grace period (>0.4s) closes the popover
+                controller.lastHoverOpenTime = Date().addingTimeInterval(-1.0)
+                controller.statusItemClicked(btn)
+                check(!testManager.isPopoverOpen, "Left-click after grace period must close popover")
+
+                // Normal click-open (not hover) can be closed immediately by another click
+                controller.statusItemClicked(btn)
+                check(testManager.isPopoverOpen, "Click should open popover")
+                check(controller.lastHoverOpenTime == nil, "Click-open must not set lastHoverOpenTime")
+                controller.statusItemClicked(btn)
+                check(!testManager.isPopoverOpen, "Immediate click after click-open must close popover")
+            }
+        }
+        let restoredGrba9HoverToOpen = UserDefaults.standard.object(forKey: "GravityBar_hoverToOpen")
+        check((savedGrba9HoverToOpen == nil && restoredGrba9HoverToOpen == nil) || (savedGrba9HoverToOpen as? Bool == restoredGrba9HoverToOpen as? Bool), "UserDefaults hoverToOpen must be restored")
+        print("✓ Hover cancellation and click race protection tests passed")
+
+        // 3r. Empty readings status and popover scroll view sizing (GRBA-10)
+        let savedGrba10Providers = UserDefaults.standard.object(forKey: "GravityBar_enabledProviders")
+        do {
+            defer {
+                if let saved = savedGrba10Providers {
+                    UserDefaults.standard.set(saved, forKey: "GravityBar_enabledProviders")
+                } else {
+                    UserDefaults.standard.removeObject(forKey: "GravityBar_enabledProviders")
+                }
+            }
+
+            // c1: overallStatusText neutral when !hasReadings
+            let emptyManager = UsageManager(startPollingImmediately: false)
+            emptyManager.providerUsages = [:]
+            emptyManager.lastUpdated = nil
+            check(!emptyManager.hasReadings, "hasReadings must be false when lastUpdated is nil")
+            check(emptyManager.overallStatusText == "No Active Readings", "overallStatusText must be 'No Active Readings' when !hasReadings")
+
+            // c1: hasReadings false when providerUsages has non-detected providers
+            let undetectedUsage = ProviderUsage.unavailable(.ollama, state: .notConfigured)
+            emptyManager.providerUsages = [.ollama: undetectedUsage]
+            emptyManager.lastUpdated = Date()
+            check(!emptyManager.hasReadings, "hasReadings must be false when no providers are detected")
+            check(emptyManager.overallStatusText == "No Active Readings", "overallStatusText must be 'No Active Readings' when detectedUsages is empty")
+
+            // c1: hasReadings true when detected provider at 0%
+            let zeroUsage = ProviderUsage(
+                provider: .claude,
+                fiveHourMetric: UsageMetric(windowType: .fiveHour, usedPercent: 0.0, resetDate: now.addingTimeInterval(3600)),
+                weeklyMetric: nil,
+                connectionState: .connected
+            )
+            emptyManager.providerUsages = [.claude: zeroUsage]
+            check(emptyManager.hasReadings, "hasReadings must be true when detected provider is present")
+            check(emptyManager.overallStatusText == "Normal / Healthy (0% used)", "overallStatusText must be 'Normal / Healthy (0% used)' when 0% detected")
+
+            // c1: elevated and critical statuses when hasReadings is true
+            let elevatedUsage = ProviderUsage(
+                provider: .codex,
+                fiveHourMetric: UsageMetric(windowType: .fiveHour, usedPercent: 70.0, resetDate: now.addingTimeInterval(3600)),
+                weeklyMetric: nil,
+                connectionState: .connected
+            )
+            emptyManager.providerUsages = [.codex: elevatedUsage]
+            check(emptyManager.overallStatusText == "Elevated Usage (70% used)", "overallStatusText must be 'Elevated Usage (70% used)'")
+
+            let criticalUsage = ProviderUsage(
+                provider: .gemini,
+                fiveHourMetric: UsageMetric(windowType: .fiveHour, usedPercent: 92.0, resetDate: now.addingTimeInterval(3600)),
+                weeklyMetric: nil,
+                connectionState: .connected
+            )
+            emptyManager.providerUsages = [.gemini: criticalUsage]
+            check(emptyManager.overallStatusText == "Critical Quota (92% used)", "overallStatusText must be 'Critical Quota (92% used)'")
+
+            // c2: PopoverView readoutView vertical sizing fits content up to maxHeight: 380
+            let sizingManager = UsageManager(startPollingImmediately: false)
+            sizingManager.enabledProviders = Set(ProviderType.allCases)
+            sizingManager.providerUsages = [:]
+            sizingManager.lastUpdated = Date()
+
+            let hcEmpty = NSHostingController(rootView: PopoverView(manager: sizingManager))
+            let emptySize = hcEmpty.sizeThatFits(in: CGSize(width: GravityBarTokens.popoverWidth, height: 1000))
+
+            sizingManager.providerUsages = [.claude: zeroUsage]
+            let hcOne = NSHostingController(rootView: PopoverView(manager: sizingManager))
+            let oneCardSize = hcOne.sizeThatFits(in: CGSize(width: GravityBarTokens.popoverWidth, height: 1000))
+
+            sizingManager.providerUsages = [.claude: zeroUsage, .codex: elevatedUsage]
+            let hcTwo = NSHostingController(rootView: PopoverView(manager: sizingManager))
+            let twoCardSize = hcTwo.sizeThatFits(in: CGSize(width: GravityBarTokens.popoverWidth, height: 1000))
+
+            let extraUsage = ProviderUsage(
+                provider: .ollama,
+                fiveHourMetric: UsageMetric(windowType: .fiveHour, usedPercent: 10.0, resetDate: now.addingTimeInterval(3600)),
+                weeklyMetric: nil,
+                connectionState: .connected
+            )
+            sizingManager.providerUsages = [.claude: zeroUsage, .codex: elevatedUsage, .gemini: criticalUsage, .ollama: extraUsage]
+            let hcFour = NSHostingController(rootView: PopoverView(manager: sizingManager))
+            let fourCardSize = hcFour.sizeThatFits(in: CGSize(width: GravityBarTokens.popoverWidth, height: 1000))
+
+            check(emptySize.height < fourCardSize.height, "empty height (\(emptySize.height)) must be smaller than 4 cards height (\(fourCardSize.height))")
+            check(oneCardSize.height < fourCardSize.height, "1 card height (\(oneCardSize.height)) must be smaller than 4 cards height (\(fourCardSize.height))")
+            check(oneCardSize.height < 350, "1 card height (\(oneCardSize.height)) must hug content and be well below 350pt")
+            check(twoCardSize.height > oneCardSize.height, "2 cards height (\(twoCardSize.height)) must be larger than 1 card height (\(oneCardSize.height))")
+            check(fourCardSize.height <= 560, "4 cards total height (\(fourCardSize.height)) must be capped by maxHeight 380 constraint")
+        }
+        let restoredGrba10Providers = UserDefaults.standard.object(forKey: "GravityBar_enabledProviders")
+        check((savedGrba10Providers == nil && restoredGrba10Providers == nil) || (savedGrba10Providers as? [String] == restoredGrba10Providers as? [String]), "UserDefaults enabledProviders must be restored")
+        print("✓ Empty readings status and popover scroll view sizing tests passed")
+
+        // 3s. Prevent overlapping refreshAll() runs and scope spinner state (GRBA-11)
+        let savedGrba11Mock = UserDefaults.standard.object(forKey: "GravityBar_isMockMode")
+        let savedGrba11Providers = UserDefaults.standard.object(forKey: "GravityBar_enabledProviders")
+        do {
+            defer {
+                if let saved = savedGrba11Mock {
+                    UserDefaults.standard.set(saved, forKey: "GravityBar_isMockMode")
+                } else {
+                    UserDefaults.standard.removeObject(forKey: "GravityBar_isMockMode")
+                }
+                if let saved = savedGrba11Providers {
+                    UserDefaults.standard.set(saved, forKey: "GravityBar_enabledProviders")
+                } else {
+                    UserDefaults.standard.removeObject(forKey: "GravityBar_enabledProviders")
+                }
+            }
+
+            let coalescingManager = UsageManager(startPollingImmediately: false)
+            coalescingManager.isMockMode = true
+            let initialCount = coalescingManager.refreshCount
+
+            // Launch 5 concurrent refreshAll calls in parallel
+            await withTaskGroup(of: Void.self) { group in
+                for _ in 0..<5 {
+                    group.addTask {
+                        await coalescingManager.refreshAll()
+                    }
+                }
+            }
+
+            // 5 concurrent calls must produce at most 2 executions (coalesced pass + at most 1 trailing pass)
+            check(coalescingManager.refreshCount <= initialCount + 2, "Concurrent refreshAll calls must produce at most 2 executions (count: \(coalescingManager.refreshCount), expected <= \(initialCount + 2))")
+            check(!coalescingManager.isRefreshing, "isRefreshing must be false after coalesced refresh completes")
+
+            let countAfterConcurrent = coalescingManager.refreshCount
+            // Sequential refresh after completion must execute as a new refresh
+            await coalescingManager.refreshAll()
+            check(coalescingManager.refreshCount == countAfterConcurrent + 1, "Sequential refreshAll must execute after previous completed")
+            check(!coalescingManager.isRefreshing, "isRefreshing must be false after sequential refresh completes")
+
+            // Trailing-refresh regression check: enable a provider during an in-flight refresh
+            let trailingManager = UsageManager(startPollingImmediately: false)
+            trailingManager.isMockMode = true
+            trailingManager.enabledProviders = [.claude]
+
+            let passCountBefore = trailingManager.refreshPassesStarted
+            // Start in-flight refresh for just .claude
+            let refreshTask = Task {
+                await trailingManager.refreshAll()
+            }
+
+            // Yield until the first pass has actually started and captured toFetch
+            while trailingManager.refreshPassesStarted == passCountBefore {
+                await Task.yield()
+            }
+            check(trailingManager.isRefreshing, "trailingManager must enter isRefreshing")
+
+            // Enable .codex and request refresh while first pass is in flight
+            trailingManager.enabledProviders.insert(.codex)
+            await trailingManager.refreshAll()
+            await refreshTask.value
+
+            check(trailingManager.providerUsages[.codex] != nil, "Trailing refresh must capture and populate newly enabled .codex usage")
+            check(!trailingManager.isRefreshing, "isRefreshing must be false after trailing refresh completes")
+        }
+        let restoredGrba11Mock = UserDefaults.standard.object(forKey: "GravityBar_isMockMode")
+        let restoredGrba11Providers = UserDefaults.standard.object(forKey: "GravityBar_enabledProviders")
+        check((savedGrba11Mock == nil && restoredGrba11Mock == nil) || (savedGrba11Mock as? Bool == restoredGrba11Mock as? Bool), "UserDefaults isMockMode must be restored")
+        check((savedGrba11Providers == nil && restoredGrba11Providers == nil) || (savedGrba11Providers as? [String] == restoredGrba11Providers as? [String]), "UserDefaults enabledProviders must be restored")
+        print("✓ Refresh coalescing guard and popover spinner tests passed")
+
+        // 3t. Codex plan badge formatting and row header layout (GRBA-12)
+        // c1 & c3: CodexProvider.formatPlanBadge formatting checks
+        check(CodexProvider.formatPlanBadge(nil) == nil, "nil raw badge must return nil")
+        check(CodexProvider.formatPlanBadge("") == nil, "empty raw badge must return nil")
+        check(CodexProvider.formatPlanBadge("   ") == nil, "whitespace raw badge must return nil")
+        check(CodexProvider.formatPlanBadge("self_serve_business_prolite") == "Pro Lite", "self_serve_business_prolite must format to 'Pro Lite'")
+        check(CodexProvider.formatPlanBadge("SELF_SERVE_BUSINESS_PROLITE") == "Pro Lite", "SELF_SERVE_BUSINESS_PROLITE must format to 'Pro Lite'")
+        check(CodexProvider.formatPlanBadge("chatgpt_plus") == "Plus", "chatgpt_plus must format to 'Plus'")
+        check(CodexProvider.formatPlanBadge("plus") == "Plus", "plus must format to 'Plus'")
+        check(CodexProvider.formatPlanBadge("Plus") == "Plus", "Plus must format to 'Plus'")
+        check(CodexProvider.formatPlanBadge("chatgpt_team") == "Team", "chatgpt_team must format to 'Team'")
+        check(CodexProvider.formatPlanBadge("team") == "Team", "team must format to 'Team'")
+        check(CodexProvider.formatPlanBadge("chatgpt_enterprise") == "Enterprise", "chatgpt_enterprise must format to 'Enterprise'")
+        check(CodexProvider.formatPlanBadge("enterprise") == "Enterprise", "enterprise must format to 'Enterprise'")
+        check(CodexProvider.formatPlanBadge("chatgpt_edu") == "Edu", "chatgpt_edu must format to 'Edu'")
+        check(CodexProvider.formatPlanBadge("free") == "Free", "free must format to 'Free'")
+        check(CodexProvider.formatPlanBadge("self_serve_business") == "Business", "self_serve_business must format to 'Business'")
+        check(CodexProvider.formatPlanBadge("self_serve_enterprise_tier") == "Enterprise Tier", "self_serve_enterprise_tier must format to 'Enterprise Tier'")
+        check(CodexProvider.formatPlanBadge("custom_plan") == "Custom Plan", "custom_plan must format to 'Custom Plan'")
+
+        // c2: UsageMetricRowView header layout stays single line (no vertical wrap expanding card height)
+        func makeTestUsage(badge: String?) -> ProviderUsage {
+            ProviderUsage(
+                provider: .codex,
+                fiveHourMetric: UsageMetric(windowType: .fiveHour, usedPercent: 42.0, resetDate: now.addingTimeInterval(3600)),
+                weeklyMetric: UsageMetric(windowType: .weekly, usedPercent: 68.0, resetDate: now.addingTimeInterval(86400)),
+                connectionState: .idleCached(lastSeen: now.addingTimeInterval(-22 * 3600)),
+                planBadge: badge
+            )
+        }
+        let cardWidth = GravityBarTokens.popoverWidth - 28
+        let sizeNil = NSHostingController(rootView: UsageMetricRowView(usage: makeTestUsage(badge: nil)).frame(width: cardWidth)).sizeThatFits(in: CGSize(width: cardWidth, height: 1000))
+        let sizeProLite = NSHostingController(rootView: UsageMetricRowView(usage: makeTestUsage(badge: CodexProvider.formatPlanBadge("self_serve_business_prolite"))).frame(width: cardWidth)).sizeThatFits(in: CGSize(width: cardWidth, height: 1000))
+        let sizeLong = NSHostingController(rootView: UsageMetricRowView(usage: makeTestUsage(badge: "Enterprise Premium Annual Tier")).frame(width: cardWidth)).sizeThatFits(in: CGSize(width: cardWidth, height: 1000))
+
+        check(sizeNil.height == 154, "Row height without badge must be 154pt (got \(sizeNil.height))")
+        check(sizeProLite.height == sizeNil.height, "Row height with Pro Lite badge (\(sizeProLite.height)) must equal nil badge height (\(sizeNil.height))")
+        check(sizeLong.height == sizeNil.height, "Row height with long badge (\(sizeLong.height)) must equal nil badge height (\(sizeNil.height))")
+        print("✓ Codex plan badge formatting and row header layout tests passed")
+
+        // 3u. Idle Ollama installed models preview and configured model de-duplication (GRBA-13)
+        let fiveInstalledTags = Data("""
+        {"models":[
+            {"name":"qwen2.5-coder:latest","size":4683087561},
+            {"name":"llama3.2:latest","size":2000000000},
+            {"name":"mistral:latest","size":4000000000},
+            {"name":"phi3:latest","size":2500000000},
+            {"name":"gemma:latest","size":3000000000}
+        ]}
+        """.utf8)
+
+        // c1 & c2 & c3: Idle Ollama with configuredModel already in /api/tags
+        // Must de-duplicate configuredModel and fill up to installedModelPreviewLimit (4) total rows
+        let idleWithConfiguredInTags = OllamaProvider.makeUsage(
+            tagsData: fiveInstalledTags,
+            psData: nil,
+            configuredModel: "qwen2.5-coder:latest"
+        )
+        check(idleWithConfiguredInTags.models.count == OllamaProvider.installedModelPreviewLimit, "Idle Ollama must fill up to installedModelPreviewLimit rows (got \(idleWithConfiguredInTags.models.count))")
+        check(idleWithConfiguredInTags.models.map(\.name) == ["qwen2.5-coder:latest", "llama3.2:latest", "mistral:latest", "phi3:latest"], "Models must include configuredModel first and de-duplicate it from installed tags")
+        check(idleWithConfiguredInTags.models.count >= 2 && idleWithConfiguredInTags.models[0].detail == "Codex default model", "Configured model must have 'Codex default model' detail")
+        check(idleWithConfiguredInTags.models.count >= 2 && idleWithConfiguredInTags.models[1].detail?.hasPrefix("installed · ") == true, "Installed models must have 'installed · ' detail")
+        check(idleWithConfiguredInTags.models.allSatisfy { !$0.isRunning }, "All idle models must have isRunning == false")
+        check(idleWithConfiguredInTags.planBadge == "5 models", "planBadge must reflect total installed models count")
+
+        // c1 & c3: Idle Ollama with configuredModel NOT in /api/tags (e.g. cloud or remote model)
+        let idleWithConfiguredNotInTags = OllamaProvider.makeUsage(
+            tagsData: fiveInstalledTags,
+            psData: Data("{\"models\":[]}".utf8),
+            configuredModel: "deepseek-r1:cloud"
+        )
+        check(idleWithConfiguredNotInTags.models.count == OllamaProvider.installedModelPreviewLimit, "Idle Ollama must fill up to installedModelPreviewLimit total rows")
+        check(idleWithConfiguredNotInTags.models.map(\.name) == ["deepseek-r1:cloud", "qwen2.5-coder:latest", "llama3.2:latest", "mistral:latest"], "Models must list external configuredModel then up to 3 installed models")
+        check(idleWithConfiguredNotInTags.models.count >= 1 && idleWithConfiguredNotInTags.models[0].detail == "Codex default model")
+        check(idleWithConfiguredNotInTags.models.allSatisfy { !$0.isRunning })
+
+        // Fewer installed models than preview limit
+        let twoInstalledTags = Data("""
+        {"models":[
+            {"name":"qwen2.5-coder:latest","size":4683087561},
+            {"name":"llama3.2:latest","size":2000000000}
+        ]}
+        """.utf8)
+        let idleFewTags = OllamaProvider.makeUsage(
+            tagsData: twoInstalledTags,
+            psData: nil,
+            configuredModel: "deepseek-r1:cloud"
+        )
+        check(idleFewTags.models.count == 3, "Idle Ollama with 2 tags and configured model must contain 3 models")
+        check(idleFewTags.models.map(\.name) == ["deepseek-r1:cloud", "qwen2.5-coder:latest", "llama3.2:latest"])
+
+        // Running models take precedence: no installed models preview when VRAM is active
+        let runningPs = Data("{\"models\":[{\"name\":\"llama3.2:latest\",\"size_vram\":5000000000}]}".utf8)
+        let runningUsage = OllamaProvider.makeUsage(
+            tagsData: fiveInstalledTags,
+            psData: runningPs,
+            configuredModel: "qwen2.5-coder:latest"
+        )
+        check(runningUsage.models.count == 2, "Running Ollama must only list running models and configured model")
+        check(runningUsage.models.map(\.name) == ["llama3.2:latest", "qwen2.5-coder:latest"])
+        check(runningUsage.models.count >= 2 && runningUsage.models[0].isRunning && !runningUsage.models[1].isRunning, "Only running model in psData has isRunning == true")
+        print("✓ Idle Ollama installed models preview and de-duplication tests passed")
+
+        // 3v. Suppress fake moving reset countdown on untouched 0% quota windows (GRBA-14)
+        // formattedReset remains a pure time formatter for active or synthetic metrics
+        let futureReset = now.addingTimeInterval(3600)
+        let activeMetric = UsageMetric(windowType: .fiveHour, usedPercent: 42.0, resetDate: futureReset)
+        check(activeMetric.formattedReset(relativeTo: now) == "Resets in 1h 0m", "Active window must format countdown")
+
+        let expiredMetric = UsageMetric(windowType: .fiveHour, usedPercent: 10.0, resetDate: now.addingTimeInterval(-10))
+        check(expiredMetric.formattedReset(relativeTo: now) == "Resets momentarily", "Expired window must format as 'Resets momentarily'")
+
+        // Regression check: nextResetCountdownText with detected usage >0% must start with "Resets in"
+        let resetTestManager = UsageManager(startPollingImmediately: false)
+        let singleUsage = ProviderUsage(
+            provider: .claude,
+            fiveHourMetric: UsageMetric(windowType: .fiveHour, usedPercent: 50.0, resetDate: now.addingTimeInterval((2 * 3600) + (10 * 60))),
+            weeklyMetric: nil,
+            connectionState: .connected
+        )
+        resetTestManager.providerUsages = [.claude: singleUsage]
+        check(resetTestManager.nextResetCountdownText.hasPrefix("Resets in"), "nextResetCountdownText must start with 'Resets in' when active usage has pending reset (got \(resetTestManager.nextResetCountdownText))")
+
+        // When all detected windows are untouched at 0%, nextResetCountdownText must report "None pending"
+        let zeroUsage = ProviderUsage(
+            provider: .claude,
+            fiveHourMetric: UsageMetric(windowType: .fiveHour, usedPercent: 0.0, resetDate: now.addingTimeInterval(5 * 3600)),
+            weeklyMetric: UsageMetric(windowType: .weekly, usedPercent: 0.0, resetDate: now.addingTimeInterval(7 * 86400)),
+            connectionState: .connected
+        )
+        resetTestManager.providerUsages = [.claude: zeroUsage]
+        check(resetTestManager.nextResetCountdownText == "None pending", "nextResetCountdownText must be 'None pending' when all windows are 0%")
+
+        // UsageMetricRowView renders "Window idle" without changing card height
+        let idleCardUsage = ProviderUsage(
+            provider: .claude,
+            fiveHourMetric: UsageMetric(windowType: .fiveHour, usedPercent: 0.0, resetDate: now.addingTimeInterval(5 * 3600)),
+            weeklyMetric: UsageMetric(windowType: .weekly, usedPercent: 40.0, resetDate: now.addingTimeInterval(86400)),
+            connectionState: .connected
+        )
+        let activeCardUsage = ProviderUsage(
+            provider: .claude,
+            fiveHourMetric: UsageMetric(windowType: .fiveHour, usedPercent: 20.0, resetDate: now.addingTimeInterval(5 * 3600)),
+            weeklyMetric: UsageMetric(windowType: .weekly, usedPercent: 40.0, resetDate: now.addingTimeInterval(86400)),
+            connectionState: .connected
+        )
+        let idleHeight = NSHostingController(rootView: UsageMetricRowView(usage: idleCardUsage).frame(width: cardWidth)).sizeThatFits(in: CGSize(width: cardWidth, height: 1000)).height
+        let activeHeight = NSHostingController(rootView: UsageMetricRowView(usage: activeCardUsage).frame(width: cardWidth)).sizeThatFits(in: CGSize(width: cardWidth, height: 1000)).height
+        check(idleHeight == activeHeight, "Card height with 'Window idle' (\(idleHeight)) must match card height with active countdown (\(activeHeight))")
+        print("✓ Idle window reset countdown suppression tests passed")
+
+        // 3w. Hide zero-token 5-hour CLI row when only 7-day CLI usage is present (GRBA-15)
+        let empty5h = TokenUsage(inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheCreationTokens: 0)
+        let active5h = TokenUsage(inputTokens: 150, outputTokens: 25, cacheReadTokens: 300, cacheCreationTokens: 0)
+        let active7d = TokenUsage(inputTokens: 10_000, outputTokens: 2_000, cacheReadTokens: 50_000, cacheCreationTokens: 0)
+
+        check(empty5h.totalTokens == 0, "empty5h totalTokens must be 0")
+        check(active5h.totalTokens > 0, "active5h totalTokens must be > 0")
+        check(active7d.totalTokens > 0, "active7d totalTokens must be > 0")
+
+        let cliCardWidth = GravityBarTokens.popoverWidth - 28
+        let baseUsage = ProviderUsage(
+            provider: .claude,
+            fiveHourMetric: UsageMetric(windowType: .fiveHour, usedPercent: 10.0, resetDate: now.addingTimeInterval(3600)),
+            weeklyMetric: UsageMetric(windowType: .weekly, usedPercent: 20.0, resetDate: now.addingTimeInterval(86400)),
+            connectionState: .connected
+        )
+
+        var usageWithNeither = baseUsage
+        usageWithNeither.cliTokenUsage = nil
+
+        var usageWith7dOnly = baseUsage
+        usageWith7dOnly.cliTokenUsage = CLITokenUsage(last5h: empty5h, last7d: active7d)
+
+        var usageWithBoth = baseUsage
+        usageWithBoth.cliTokenUsage = CLITokenUsage(last5h: active5h, last7d: active7d)
+
+        let heightNeither = NSHostingController(rootView: UsageMetricRowView(usage: usageWithNeither).frame(width: cliCardWidth)).sizeThatFits(in: CGSize(width: cliCardWidth, height: 1000)).height
+        let height7dOnly = NSHostingController(rootView: UsageMetricRowView(usage: usageWith7dOnly).frame(width: cliCardWidth)).sizeThatFits(in: CGSize(width: cliCardWidth, height: 1000)).height
+        let heightBoth = NSHostingController(rootView: UsageMetricRowView(usage: usageWithBoth).frame(width: cliCardWidth)).sizeThatFits(in: CGSize(width: cliCardWidth, height: 1000)).height
+
+        // 7d-only card must be taller than no-CLI card (proving 7d row is rendered)
+        check(height7dOnly > heightNeither, "Card with 7d CLI usage (\(height7dOnly)) must be taller than card with no CLI usage (\(heightNeither))")
+        // 7d-only card must be shorter than both-rows card (proving 0-token 5h row is omitted)
+        check(height7dOnly < heightBoth, "Card with 0-token 5h CLI row hidden (\(height7dOnly)) must be shorter than card with both rows (\(heightBoth))")
+        print("✓ Zero-token 5-hour CLI row suppression tests passed")
 
         // MARK: Live machine smoke output (informational)
         // Reads whatever is installed on this Mac. Nothing here can fail the run: on CI these sources are

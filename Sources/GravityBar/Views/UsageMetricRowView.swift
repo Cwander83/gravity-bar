@@ -16,18 +16,25 @@ public struct UsageMetricRowView: View {
                 Text(usage.provider.displayName)
                     .font(.system(size: 13, weight: .bold))
                     .foregroundColor(.primary)
+                    .lineLimit(1)
+                    .fixedSize(horizontal: true, vertical: false)
+                    .layoutPriority(2)
                 if let badge = usage.planBadge {
                     Text(badge.uppercased())
                         .font(.system(size: 8, weight: .black))
                         .padding(.horizontal, 5)
                         .padding(.vertical, 2)
-                        .background(Color.white.opacity(0.08))
+                        .background(GravityBarTokens.badgeBackground)
                         .foregroundColor(.secondary)
                         .cornerRadius(4)
+                        .lineLimit(1)
+                        .layoutPriority(1)
                 }
-                Spacer()
+                Spacer(minLength: 4)
                 if let status = usage.connectionState.label() {
                     connectionStatusView(status)
+                        .lineLimit(1)
+                        .layoutPriority(0)
                 }
             }
 
@@ -71,7 +78,7 @@ public struct UsageMetricRowView: View {
         )
         .overlay(
             RoundedRectangle(cornerRadius: GravityBarTokens.cardCornerRadius)
-                .stroke(Color.white.opacity(0.09), lineWidth: 1)
+                .stroke(GravityBarTokens.cardBorder, lineWidth: 1)
         )
     }
 
@@ -136,6 +143,7 @@ public struct UsageMetricRowView: View {
                 .font(.system(size: 9, weight: .semibold))
                 .foregroundColor(.secondary)
                 .lineLimit(1)
+                .truncationMode(.tail)
         }
     }
 
@@ -172,7 +180,9 @@ public struct UsageMetricRowView: View {
                 .font(.system(size: 9, weight: .black))
                 .foregroundColor(.secondary)
 
-            tokenRow(label: "Last 5h", usage: cli.last5h)
+            if cli.last5h.totalTokens > 0 {
+                tokenRow(label: "Last 5h", usage: cli.last5h)
+            }
             tokenRow(label: "Last 7d", usage: cli.last7d)
         }
     }
@@ -219,7 +229,7 @@ public struct UsageMetricRowView: View {
             GeometryReader { geometry in
                 ZStack(alignment: .leading) {
                     Capsule()
-                        .fill(Color.white.opacity(0.08))
+                        .fill(GravityBarTokens.progressTrack)
                         .frame(height: GravityBarTokens.progressBarHeight)
 
                     Capsule()
@@ -237,7 +247,7 @@ public struct UsageMetricRowView: View {
             HStack(spacing: 4) {
                 Image(systemName: "clock.arrow.circlepath")
                     .font(.system(size: 9))
-                Text(metric.formattedReset())
+                Text(metric.usedPercent <= 0 ? "Window idle" : metric.formattedReset())
                     .font(.system(size: 10, weight: .medium))
             }
             .foregroundColor(.secondary)
