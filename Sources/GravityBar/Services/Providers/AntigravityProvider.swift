@@ -76,6 +76,10 @@ public final class AntigravityProvider: UsageProvider {
     static let sharedSession: URLSession = {
         let sessionConfig = URLSessionConfiguration.ephemeral
         sessionConfig.timeoutIntervalForRequest = 1.5
+        sessionConfig.httpCookieStorage = nil
+        sessionConfig.httpShouldSetCookies = false
+        sessionConfig.urlCache = nil
+        sessionConfig.requestCachePolicy = .reloadIgnoringLocalCacheData
         return URLSession(configuration: sessionConfig, delegate: sharedDelegate, delegateQueue: nil)
     }()
 
@@ -347,12 +351,19 @@ public final class AntigravityProvider: UsageProvider {
 final class LocalhostTrustDelegate: NSObject, URLSessionDelegate {
     static let loopbackHosts: Set<String> = ["127.0.0.1", "localhost", "::1"]
     private static let lock = NSLock()
-    private(set) static var instanceCount = 0
+    #if DEBUG
+    private static var _instanceCount = 0
+    static var instanceCount: Int {
+        lock.withLock { _instanceCount }
+    }
+    #endif
 
     override init() {
+        #if DEBUG
         Self.lock.withLock {
-            Self.instanceCount += 1
+            Self._instanceCount += 1
         }
+        #endif
         super.init()
     }
 

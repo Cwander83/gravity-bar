@@ -20,6 +20,10 @@ public final class OllamaProvider: UsageProvider {
     static let sharedSession: URLSession = {
         let sessionConfig = URLSessionConfiguration.ephemeral
         sessionConfig.timeoutIntervalForRequest = 1.5
+        sessionConfig.httpCookieStorage = nil
+        sessionConfig.httpShouldSetCookies = false
+        sessionConfig.urlCache = nil
+        sessionConfig.requestCachePolicy = .reloadIgnoringLocalCacheData
         return URLSession(configuration: sessionConfig)
     }()
 
