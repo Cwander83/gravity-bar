@@ -112,7 +112,6 @@ public final class UsageManager: ObservableObject {
         }
     }
 
-    @Published public var isSpinning: Bool = false
     @Published public var isPopoverOpen: Bool = false {
         didSet {
             guard isPopoverOpen != oldValue else { return }
@@ -132,7 +131,10 @@ public final class UsageManager: ObservableObject {
     @Published public private(set) var isRefreshing: Bool = false
     @Published public internal(set) var lastUpdated: Date?
     @Published public private(set) var refreshCount: Int = 0
+    internal private(set) var refreshPassesStarted: Int = 0
 
+    private var activeRefreshTask: Task<Void, Never>?
+    private var refreshRequestedDuringFlight: Bool = false
     private var pollingTimer: Timer?
     private var countdownTimer: Timer?
 
@@ -230,14 +232,45 @@ public final class UsageManager: ObservableObject {
     }
 
     public func refreshAll() async {
+        if let currentTask = activeRefreshTask {
+            refreshRequestedDuringFlight = true
+            await currentTask.value
+            return
+        }
+
         isRefreshing = true
+        refreshRequestedDuringFlight = false
+
+        let refreshTask = Task { @MainActor [weak self] in
+            guard let self = self else { return }
+            defer {
+                self.isRefreshing = false
+                self.activeRefreshTask = nil
+                self.refreshRequestedDuringFlight = false
+            }
+
+            while true {
+                await self.performRefreshOnce()
+                if !self.refreshRequestedDuringFlight {
+                    break
+                }
+                self.refreshRequestedDuringFlight = false
+            }
+        }
+
+        self.activeRefreshTask = refreshTask
+        await refreshTask.value
+    }
+
+    private func performRefreshOnce() async {
         setupProvidersIfNeeded()
 
         // Fetch all enabled providers in parallel. fetchUsage is nonisolated async, so child tasks run off the
         // main actor; only the result assignment below happens on it.
         let toFetch = ProviderType.allCases
-            .filter { enabledProviders.contains($0) }
-            .compactMap { type in providers[type].map { (type, $0) } }
+            .filter { self.enabledProviders.contains($0) }
+            .compactMap { type in self.providers[type].map { (type, $0) } }
+        refreshPassesStarted += 1
 
         let results = await withTaskGroup(of: (ProviderType, ProviderUsage).self) { group in
             for (providerType, provider) in toFetch {
@@ -259,12 +292,11 @@ public final class UsageManager: ObservableObject {
         }
 
         for (providerType, usage) in results {
-            providerUsages[providerType] = usage
+            self.providerUsages[providerType] = usage
         }
 
-        lastUpdated = Date()
-        refreshCount += 1
-        isRefreshing = false
+        self.lastUpdated = Date()
+        self.refreshCount += 1
     }
 
     /// Enabled providers shown in the popover: detected ones, plus offline ones when Show Offline Providers is on.

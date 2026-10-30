@@ -606,6 +606,77 @@ enum SelfTests {
         check((savedGrba10Providers == nil && restoredGrba10Providers == nil) || (savedGrba10Providers as? [String] == restoredGrba10Providers as? [String]), "UserDefaults enabledProviders must be restored")
         print("✓ Empty readings status and popover scroll view sizing tests passed")
 
+        // 3s. Prevent overlapping refreshAll() runs and scope spinner state (GRBA-11)
+        let savedGrba11Mock = UserDefaults.standard.object(forKey: "GravityBar_isMockMode")
+        let savedGrba11Providers = UserDefaults.standard.object(forKey: "GravityBar_enabledProviders")
+        do {
+            defer {
+                if let saved = savedGrba11Mock {
+                    UserDefaults.standard.set(saved, forKey: "GravityBar_isMockMode")
+                } else {
+                    UserDefaults.standard.removeObject(forKey: "GravityBar_isMockMode")
+                }
+                if let saved = savedGrba11Providers {
+                    UserDefaults.standard.set(saved, forKey: "GravityBar_enabledProviders")
+                } else {
+                    UserDefaults.standard.removeObject(forKey: "GravityBar_enabledProviders")
+                }
+            }
+
+            let coalescingManager = UsageManager(startPollingImmediately: false)
+            coalescingManager.isMockMode = true
+            let initialCount = coalescingManager.refreshCount
+
+            // Launch 5 concurrent refreshAll calls in parallel
+            await withTaskGroup(of: Void.self) { group in
+                for _ in 0..<5 {
+                    group.addTask {
+                        await coalescingManager.refreshAll()
+                    }
+                }
+            }
+
+            // 5 concurrent calls must produce at most 2 executions (coalesced pass + at most 1 trailing pass)
+            check(coalescingManager.refreshCount <= initialCount + 2, "Concurrent refreshAll calls must produce at most 2 executions (count: \(coalescingManager.refreshCount), expected <= \(initialCount + 2))")
+            check(!coalescingManager.isRefreshing, "isRefreshing must be false after coalesced refresh completes")
+
+            let countAfterConcurrent = coalescingManager.refreshCount
+            // Sequential refresh after completion must execute as a new refresh
+            await coalescingManager.refreshAll()
+            check(coalescingManager.refreshCount == countAfterConcurrent + 1, "Sequential refreshAll must execute after previous completed")
+            check(!coalescingManager.isRefreshing, "isRefreshing must be false after sequential refresh completes")
+
+            // Trailing-refresh regression check: enable a provider during an in-flight refresh
+            let trailingManager = UsageManager(startPollingImmediately: false)
+            trailingManager.isMockMode = true
+            trailingManager.enabledProviders = [.claude]
+
+            let passCountBefore = trailingManager.refreshPassesStarted
+            // Start in-flight refresh for just .claude
+            let refreshTask = Task {
+                await trailingManager.refreshAll()
+            }
+
+            // Yield until the first pass has actually started and captured toFetch
+            while trailingManager.refreshPassesStarted == passCountBefore {
+                await Task.yield()
+            }
+            check(trailingManager.isRefreshing, "trailingManager must enter isRefreshing")
+
+            // Enable .codex and request refresh while first pass is in flight
+            trailingManager.enabledProviders.insert(.codex)
+            await trailingManager.refreshAll()
+            await refreshTask.value
+
+            check(trailingManager.providerUsages[.codex] != nil, "Trailing refresh must capture and populate newly enabled .codex usage")
+            check(!trailingManager.isRefreshing, "isRefreshing must be false after trailing refresh completes")
+        }
+        let restoredGrba11Mock = UserDefaults.standard.object(forKey: "GravityBar_isMockMode")
+        let restoredGrba11Providers = UserDefaults.standard.object(forKey: "GravityBar_enabledProviders")
+        check((savedGrba11Mock == nil && restoredGrba11Mock == nil) || (savedGrba11Mock as? Bool == restoredGrba11Mock as? Bool), "UserDefaults isMockMode must be restored")
+        check((savedGrba11Providers == nil && restoredGrba11Providers == nil) || (savedGrba11Providers as? [String] == restoredGrba11Providers as? [String]), "UserDefaults enabledProviders must be restored")
+        print("✓ Refresh coalescing guard and popover spinner tests passed")
+
         // MARK: Live machine smoke output (informational)
         // Reads whatever is installed on this Mac. Nothing here can fail the run: on CI these sources are
         // absent, and the deterministic fixture checks above are what gate the build.

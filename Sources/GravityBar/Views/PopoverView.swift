@@ -5,6 +5,7 @@ import AppKit
 @MainActor
 public struct PopoverView: View {
     @ObservedObject var manager: UsageManager
+    @State private var isSpinning: Bool = false
 
     public init(manager: UsageManager) {
         self.manager = manager
@@ -118,23 +119,25 @@ public struct PopoverView: View {
                 // Refresh Button
                 Button(action: {
                     withAnimation(.linear(duration: 0.7)) {
-                        manager.isSpinning = true
+                        isSpinning = true
                     }
                     Task {
                         await manager.refreshAll()
                         try? await Task.sleep(nanoseconds: 700_000_000)
-                        manager.isSpinning = false
+                        isSpinning = false
                     }
                 }) {
                     Image(systemName: "arrow.triangle.2.circlepath")
                         .font(.system(size: 12, weight: .semibold))
                         .foregroundColor(.secondary)
-                        .rotationEffect(.degrees(manager.isSpinning ? 360 : 0))
+                        .rotationEffect(.degrees(isSpinning ? 360 : 0))
                         .frame(width: 26, height: 26)
                         .background(GravityBarTokens.buttonBackground)
                         .cornerRadius(6)
                 }
                 .buttonStyle(.plain)
+                .disabled(manager.isRefreshing)
+                .help("Refresh")
 
                 // Preferences Gear
                 Button(action: { manager.showingSettings = true }) {
@@ -146,6 +149,7 @@ public struct PopoverView: View {
                         .cornerRadius(6)
                 }
                 .buttonStyle(.plain)
+                .help("Preferences")
             }
         }
         .padding(.horizontal, 14)
