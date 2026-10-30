@@ -16,6 +16,9 @@ public struct UsageMetricRowView: View {
                 Text(usage.provider.displayName)
                     .font(.system(size: 13, weight: .bold))
                     .foregroundColor(.primary)
+                    .lineLimit(1)
+                    .fixedSize(horizontal: true, vertical: false)
+                    .layoutPriority(2)
                 if let badge = usage.planBadge {
                     Text(badge.uppercased())
                         .font(.system(size: 8, weight: .black))
@@ -24,10 +27,14 @@ public struct UsageMetricRowView: View {
                         .background(GravityBarTokens.badgeBackground)
                         .foregroundColor(.secondary)
                         .cornerRadius(4)
+                        .lineLimit(1)
+                        .layoutPriority(1)
                 }
-                Spacer()
+                Spacer(minLength: 4)
                 if let status = usage.connectionState.label() {
                     connectionStatusView(status)
+                        .lineLimit(1)
+                        .layoutPriority(0)
                 }
             }
 
@@ -136,6 +143,7 @@ public struct UsageMetricRowView: View {
                 .font(.system(size: 9, weight: .semibold))
                 .foregroundColor(.secondary)
                 .lineLimit(1)
+                .truncationMode(.tail)
         }
     }
 

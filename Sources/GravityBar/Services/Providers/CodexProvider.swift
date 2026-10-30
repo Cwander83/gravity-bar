@@ -63,9 +63,56 @@ public final class CodexProvider: UsageProvider {
             weeklyMetric: longest,
             cliTokenUsage: tokens.last7d.totalTokens > 0 ? tokens : nil,
             connectionState: chatGPTRunning ? .connected : .fromLastSeen(lastSeen, now: now),
-            planBadge: latest?.planType?.capitalized,
+            planBadge: formatPlanBadge(latest?.planType),
             models: models
         )
+    }
+
+    /// Formats snake_case Codex plan identifiers into compact, human-readable badges.
+    public static func formatPlanBadge(_ raw: String?) -> String? {
+        guard let raw = raw?.trimmingCharacters(in: .whitespacesAndNewlines), !raw.isEmpty else {
+            return nil
+        }
+
+        let lower = raw.lowercased()
+
+        switch lower {
+        case "self_serve_business_prolite", "business_prolite", "prolite":
+            return "Pro Lite"
+        case "chatgpt_plus", "plus":
+            return "Plus"
+        case "chatgpt_team", "team":
+            return "Team"
+        case "chatgpt_enterprise", "enterprise":
+            return "Enterprise"
+        case "chatgpt_edu", "edu":
+            return "Edu"
+        case "free":
+            return "Free"
+        case "pro", "self_serve_pro":
+            return "Pro"
+        case "self_serve_business", "business":
+            return "Business"
+        default:
+            break
+        }
+
+        var clean = lower
+        if clean.hasPrefix("self_serve_") {
+            clean.removeFirst("self_serve_".count)
+        }
+        if clean.hasPrefix("chatgpt_") {
+            clean.removeFirst("chatgpt_".count)
+        }
+        clean = clean.replacingOccurrences(of: "prolite", with: "pro lite")
+            .replacingOccurrences(of: "_", with: " ")
+            .replacingOccurrences(of: "-", with: " ")
+
+        let words = clean.split(separator: " ").map { word -> String in
+            word.prefix(1).uppercased() + word.dropFirst().lowercased()
+        }
+        let result = words.joined(separator: " ")
+        return result.isEmpty ? nil : result
     }
 }
 
