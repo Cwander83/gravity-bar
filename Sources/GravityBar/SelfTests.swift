@@ -717,6 +717,69 @@ enum SelfTests {
         check(sizeLong.height == sizeNil.height, "Row height with long badge (\(sizeLong.height)) must equal nil badge height (\(sizeNil.height))")
         print("✓ Codex plan badge formatting and row header layout tests passed")
 
+        // 3u. Idle Ollama installed models preview and configured model de-duplication (GRBA-13)
+        let fiveInstalledTags = Data("""
+        {"models":[
+            {"name":"qwen2.5-coder:latest","size":4683087561},
+            {"name":"llama3.2:latest","size":2000000000},
+            {"name":"mistral:latest","size":4000000000},
+            {"name":"phi3:latest","size":2500000000},
+            {"name":"gemma:latest","size":3000000000}
+        ]}
+        """.utf8)
+
+        // c1 & c2 & c3: Idle Ollama with configuredModel already in /api/tags
+        // Must de-duplicate configuredModel and fill up to installedModelPreviewLimit (4) total rows
+        let idleWithConfiguredInTags = OllamaProvider.makeUsage(
+            tagsData: fiveInstalledTags,
+            psData: nil,
+            configuredModel: "qwen2.5-coder:latest"
+        )
+        check(idleWithConfiguredInTags.models.count == OllamaProvider.installedModelPreviewLimit, "Idle Ollama must fill up to installedModelPreviewLimit rows (got \(idleWithConfiguredInTags.models.count))")
+        check(idleWithConfiguredInTags.models.map(\.name) == ["qwen2.5-coder:latest", "llama3.2:latest", "mistral:latest", "phi3:latest"], "Models must include configuredModel first and de-duplicate it from installed tags")
+        check(idleWithConfiguredInTags.models[0].detail == "Codex default model", "Configured model must have 'Codex default model' detail")
+        check(idleWithConfiguredInTags.models[1].detail?.hasPrefix("installed · ") == true, "Installed models must have 'installed · ' detail")
+        check(idleWithConfiguredInTags.models.allSatisfy { !$0.isRunning }, "All idle models must have isRunning == false")
+        check(idleWithConfiguredInTags.planBadge == "5 models", "planBadge must reflect total installed models count")
+
+        // c1 & c3: Idle Ollama with configuredModel NOT in /api/tags (e.g. cloud or remote model)
+        let idleWithConfiguredNotInTags = OllamaProvider.makeUsage(
+            tagsData: fiveInstalledTags,
+            psData: Data("{\"models\":[]}".utf8),
+            configuredModel: "deepseek-r1:cloud"
+        )
+        check(idleWithConfiguredNotInTags.models.count == OllamaProvider.installedModelPreviewLimit, "Idle Ollama must fill up to installedModelPreviewLimit total rows")
+        check(idleWithConfiguredNotInTags.models.map(\.name) == ["deepseek-r1:cloud", "qwen2.5-coder:latest", "llama3.2:latest", "mistral:latest"], "Models must list external configuredModel then up to 3 installed models")
+        check(idleWithConfiguredNotInTags.models[0].detail == "Codex default model")
+        check(idleWithConfiguredNotInTags.models.allSatisfy { !$0.isRunning })
+
+        // Fewer installed models than preview limit
+        let twoInstalledTags = Data("""
+        {"models":[
+            {"name":"qwen2.5-coder:latest","size":4683087561},
+            {"name":"llama3.2:latest","size":2000000000}
+        ]}
+        """.utf8)
+        let idleFewTags = OllamaProvider.makeUsage(
+            tagsData: twoInstalledTags,
+            psData: nil,
+            configuredModel: "deepseek-r1:cloud"
+        )
+        check(idleFewTags.models.count == 3, "Idle Ollama with 2 tags and configured model must contain 3 models")
+        check(idleFewTags.models.map(\.name) == ["deepseek-r1:cloud", "qwen2.5-coder:latest", "llama3.2:latest"])
+
+        // Running models take precedence: no installed models preview when VRAM is active
+        let runningPs = Data("{\"models\":[{\"name\":\"llama3.2:latest\",\"size_vram\":5000000000}]}".utf8)
+        let runningUsage = OllamaProvider.makeUsage(
+            tagsData: fiveInstalledTags,
+            psData: runningPs,
+            configuredModel: "qwen2.5-coder:latest"
+        )
+        check(runningUsage.models.count == 2, "Running Ollama must only list running models and configured model")
+        check(runningUsage.models.map(\.name) == ["llama3.2:latest", "qwen2.5-coder:latest"])
+        check(runningUsage.models[0].isRunning && !runningUsage.models[1].isRunning, "Only running model in psData has isRunning == true")
+        print("✓ Idle Ollama installed models preview and de-duplication tests passed")
+
         // MARK: Live machine smoke output (informational)
         // Reads whatever is installed on this Mac. Nothing here can fail the run: on CI these sources are
         // absent, and the deterministic fixture checks above are what gate the build.
