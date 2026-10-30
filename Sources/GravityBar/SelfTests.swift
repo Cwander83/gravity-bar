@@ -677,6 +677,46 @@ enum SelfTests {
         check((savedGrba11Providers == nil && restoredGrba11Providers == nil) || (savedGrba11Providers as? [String] == restoredGrba11Providers as? [String]), "UserDefaults enabledProviders must be restored")
         print("✓ Refresh coalescing guard and popover spinner tests passed")
 
+        // 3t. Codex plan badge formatting and row header layout (GRBA-12)
+        // c1 & c3: CodexProvider.formatPlanBadge formatting checks
+        check(CodexProvider.formatPlanBadge(nil) == nil, "nil raw badge must return nil")
+        check(CodexProvider.formatPlanBadge("") == nil, "empty raw badge must return nil")
+        check(CodexProvider.formatPlanBadge("   ") == nil, "whitespace raw badge must return nil")
+        check(CodexProvider.formatPlanBadge("self_serve_business_prolite") == "Pro Lite", "self_serve_business_prolite must format to 'Pro Lite'")
+        check(CodexProvider.formatPlanBadge("SELF_SERVE_BUSINESS_PROLITE") == "Pro Lite", "SELF_SERVE_BUSINESS_PROLITE must format to 'Pro Lite'")
+        check(CodexProvider.formatPlanBadge("chatgpt_plus") == "Plus", "chatgpt_plus must format to 'Plus'")
+        check(CodexProvider.formatPlanBadge("plus") == "Plus", "plus must format to 'Plus'")
+        check(CodexProvider.formatPlanBadge("Plus") == "Plus", "Plus must format to 'Plus'")
+        check(CodexProvider.formatPlanBadge("chatgpt_team") == "Team", "chatgpt_team must format to 'Team'")
+        check(CodexProvider.formatPlanBadge("team") == "Team", "team must format to 'Team'")
+        check(CodexProvider.formatPlanBadge("chatgpt_enterprise") == "Enterprise", "chatgpt_enterprise must format to 'Enterprise'")
+        check(CodexProvider.formatPlanBadge("enterprise") == "Enterprise", "enterprise must format to 'Enterprise'")
+        check(CodexProvider.formatPlanBadge("chatgpt_edu") == "Edu", "chatgpt_edu must format to 'Edu'")
+        check(CodexProvider.formatPlanBadge("free") == "Free", "free must format to 'Free'")
+        check(CodexProvider.formatPlanBadge("self_serve_business") == "Business", "self_serve_business must format to 'Business'")
+        check(CodexProvider.formatPlanBadge("self_serve_enterprise_tier") == "Enterprise Tier", "self_serve_enterprise_tier must format to 'Enterprise Tier'")
+        check(CodexProvider.formatPlanBadge("custom_plan") == "Custom Plan", "custom_plan must format to 'Custom Plan'")
+
+        // c2: UsageMetricRowView header layout stays single line (no vertical wrap expanding card height)
+        func makeTestUsage(badge: String?) -> ProviderUsage {
+            ProviderUsage(
+                provider: .codex,
+                fiveHourMetric: UsageMetric(windowType: .fiveHour, usedPercent: 42.0, resetDate: now.addingTimeInterval(3600)),
+                weeklyMetric: UsageMetric(windowType: .weekly, usedPercent: 68.0, resetDate: now.addingTimeInterval(86400)),
+                connectionState: .idleCached(lastSeen: now.addingTimeInterval(-22 * 3600)),
+                planBadge: badge
+            )
+        }
+        let cardWidth = GravityBarTokens.popoverWidth - 28
+        let sizeNil = NSHostingController(rootView: UsageMetricRowView(usage: makeTestUsage(badge: nil)).frame(width: cardWidth)).sizeThatFits(in: CGSize(width: cardWidth, height: 1000))
+        let sizeProLite = NSHostingController(rootView: UsageMetricRowView(usage: makeTestUsage(badge: CodexProvider.formatPlanBadge("self_serve_business_prolite"))).frame(width: cardWidth)).sizeThatFits(in: CGSize(width: cardWidth, height: 1000))
+        let sizeLong = NSHostingController(rootView: UsageMetricRowView(usage: makeTestUsage(badge: "Enterprise Premium Annual Tier")).frame(width: cardWidth)).sizeThatFits(in: CGSize(width: cardWidth, height: 1000))
+
+        check(sizeNil.height == 154, "Row height without badge must be 154pt (got \(sizeNil.height))")
+        check(sizeProLite.height == sizeNil.height, "Row height with Pro Lite badge (\(sizeProLite.height)) must equal nil badge height (\(sizeNil.height))")
+        check(sizeLong.height == sizeNil.height, "Row height with long badge (\(sizeLong.height)) must equal nil badge height (\(sizeNil.height))")
+        print("✓ Codex plan badge formatting and row header layout tests passed")
+
         // MARK: Live machine smoke output (informational)
         // Reads whatever is installed on this Mac. Nothing here can fail the run: on CI these sources are
         // absent, and the deterministic fixture checks above are what gate the build.
