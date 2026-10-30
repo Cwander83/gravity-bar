@@ -606,6 +606,46 @@ enum SelfTests {
         check((savedGrba10Providers == nil && restoredGrba10Providers == nil) || (savedGrba10Providers as? [String] == restoredGrba10Providers as? [String]), "UserDefaults enabledProviders must be restored")
         print("✓ Empty readings status and popover scroll view sizing tests passed")
 
+        // 3s. Prevent overlapping refreshAll() runs and scope spinner state (GRBA-11)
+        let savedGrba11Mock = UserDefaults.standard.object(forKey: "GravityBar_isMockMode")
+        do {
+            defer {
+                if let saved = savedGrba11Mock {
+                    UserDefaults.standard.set(saved, forKey: "GravityBar_isMockMode")
+                } else {
+                    UserDefaults.standard.removeObject(forKey: "GravityBar_isMockMode")
+                }
+            }
+
+            let coalescingManager = UsageManager(startPollingImmediately: false)
+            coalescingManager.isMockMode = true
+            let initialCount = coalescingManager.refreshCount
+
+            // Launch 5 concurrent refreshAll calls in parallel
+            await withTaskGroup(of: Void.self) { group in
+                for _ in 0..<5 {
+                    group.addTask {
+                        await coalescingManager.refreshAll()
+                    }
+                }
+            }
+
+            // All 5 overlapping calls must coalesce into exactly 1 refresh execution
+            check(coalescingManager.refreshCount == initialCount + 1, "Concurrent refreshAll calls must coalesce into a single execution (count: \(coalescingManager.refreshCount), expected: \(initialCount + 1))")
+            check(!coalescingManager.isRefreshing, "isRefreshing must be false after coalesced refresh completes")
+
+            // Sequential refresh after completion must execute as a new refresh
+            await coalescingManager.refreshAll()
+            check(coalescingManager.refreshCount == initialCount + 2, "Sequential refreshAll must execute after previous completed")
+            check(!coalescingManager.isRefreshing, "isRefreshing must be false after sequential refresh completes")
+
+            // PopoverView renders cleanly with isRefreshing state
+            _ = PopoverView(manager: coalescingManager)
+        }
+        let restoredGrba11Mock = UserDefaults.standard.object(forKey: "GravityBar_isMockMode")
+        check((savedGrba11Mock == nil && restoredGrba11Mock == nil) || (savedGrba11Mock as? Bool == restoredGrba11Mock as? Bool), "UserDefaults isMockMode must be restored")
+        print("✓ Refresh coalescing guard and popover spinner tests passed")
+
         // MARK: Live machine smoke output (informational)
         // Reads whatever is installed on this Mac. Nothing here can fail the run: on CI these sources are
         // absent, and the deterministic fixture checks above are what gate the build.
