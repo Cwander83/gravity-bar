@@ -780,6 +780,54 @@ enum SelfTests {
         check(runningUsage.models.count >= 2 && runningUsage.models[0].isRunning && !runningUsage.models[1].isRunning, "Only running model in psData has isRunning == true")
         print("✓ Idle Ollama installed models preview and de-duplication tests passed")
 
+        // 3v. Suppress fake moving reset countdown on untouched 0% quota windows (GRBA-14)
+        // formattedReset remains a pure time formatter for active or synthetic metrics
+        let futureReset = now.addingTimeInterval(3600)
+        let activeMetric = UsageMetric(windowType: .fiveHour, usedPercent: 42.0, resetDate: futureReset)
+        check(activeMetric.formattedReset(relativeTo: now) == "Resets in 1h 0m", "Active window must format countdown")
+
+        let expiredMetric = UsageMetric(windowType: .fiveHour, usedPercent: 10.0, resetDate: now.addingTimeInterval(-10))
+        check(expiredMetric.formattedReset(relativeTo: now) == "Resets momentarily", "Expired window must format as 'Resets momentarily'")
+
+        // Regression check: nextResetCountdownText with detected usage >0% must start with "Resets in"
+        let resetTestManager = UsageManager(startPollingImmediately: false)
+        let singleUsage = ProviderUsage(
+            provider: .claude,
+            fiveHourMetric: UsageMetric(windowType: .fiveHour, usedPercent: 50.0, resetDate: now.addingTimeInterval((2 * 3600) + (10 * 60))),
+            weeklyMetric: nil,
+            connectionState: .connected
+        )
+        resetTestManager.providerUsages = [.claude: singleUsage]
+        check(resetTestManager.nextResetCountdownText.hasPrefix("Resets in"), "nextResetCountdownText must start with 'Resets in' when active usage has pending reset (got \(resetTestManager.nextResetCountdownText))")
+
+        // When all detected windows are untouched at 0%, nextResetCountdownText must report "None pending"
+        let zeroUsage = ProviderUsage(
+            provider: .claude,
+            fiveHourMetric: UsageMetric(windowType: .fiveHour, usedPercent: 0.0, resetDate: now.addingTimeInterval(5 * 3600)),
+            weeklyMetric: UsageMetric(windowType: .weekly, usedPercent: 0.0, resetDate: now.addingTimeInterval(7 * 86400)),
+            connectionState: .connected
+        )
+        resetTestManager.providerUsages = [.claude: zeroUsage]
+        check(resetTestManager.nextResetCountdownText == "None pending", "nextResetCountdownText must be 'None pending' when all windows are 0%")
+
+        // UsageMetricRowView renders "Window idle" without changing card height
+        let idleCardUsage = ProviderUsage(
+            provider: .claude,
+            fiveHourMetric: UsageMetric(windowType: .fiveHour, usedPercent: 0.0, resetDate: now.addingTimeInterval(5 * 3600)),
+            weeklyMetric: UsageMetric(windowType: .weekly, usedPercent: 40.0, resetDate: now.addingTimeInterval(86400)),
+            connectionState: .connected
+        )
+        let activeCardUsage = ProviderUsage(
+            provider: .claude,
+            fiveHourMetric: UsageMetric(windowType: .fiveHour, usedPercent: 20.0, resetDate: now.addingTimeInterval(5 * 3600)),
+            weeklyMetric: UsageMetric(windowType: .weekly, usedPercent: 40.0, resetDate: now.addingTimeInterval(86400)),
+            connectionState: .connected
+        )
+        let idleHeight = NSHostingController(rootView: UsageMetricRowView(usage: idleCardUsage).frame(width: cardWidth)).sizeThatFits(in: CGSize(width: cardWidth, height: 1000)).height
+        let activeHeight = NSHostingController(rootView: UsageMetricRowView(usage: activeCardUsage).frame(width: cardWidth)).sizeThatFits(in: CGSize(width: cardWidth, height: 1000)).height
+        check(idleHeight == activeHeight, "Card height with 'Window idle' (\(idleHeight)) must match card height with active countdown (\(activeHeight))")
+        print("✓ Idle window reset countdown suppression tests passed")
+
         // 3w. Hide zero-token 5-hour CLI row when only 7-day CLI usage is present (GRBA-15)
         let empty5h = TokenUsage(inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheCreationTokens: 0)
         let active5h = TokenUsage(inputTokens: 150, outputTokens: 25, cacheReadTokens: 300, cacheCreationTokens: 0)

@@ -348,7 +348,9 @@ public final class UsageManager: ObservableObject {
         guard let earliest = allMetrics.map({ $0.resetDate }).filter({ $0 > Date() }).min() else {
             return "None pending"
         }
-        let metric = UsageMetric(windowType: .fiveHour, usedPercent: 0, resetDate: earliest)
+        guard let metric = allMetrics.first(where: { $0.resetDate == earliest }) else {
+            return "None pending"
+        }
         return metric.formattedReset()
     }
 
