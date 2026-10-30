@@ -28,6 +28,10 @@ enum SelfTests {
         check(QuotaThreshold.from(usedPercent: 85.0) == .warning)
         check(QuotaThreshold.from(usedPercent: 85.1) == .critical)
         check(QuotaThreshold.from(usedPercent: 100.0) == .critical)
+        check(QuotaThreshold.from(usedPercent: GravityBarTokens.thresholdNormalLimit - 0.1) == .normal)
+        check(QuotaThreshold.from(usedPercent: GravityBarTokens.thresholdNormalLimit) == .warning)
+        check(QuotaThreshold.from(usedPercent: GravityBarTokens.thresholdWarningLimit) == .warning)
+        check(QuotaThreshold.from(usedPercent: GravityBarTokens.thresholdWarningLimit + 0.1) == .critical)
         print("✓ Quota threshold tests passed")
 
         // 2. Countdowns

@@ -47,12 +47,19 @@ gravity-bar/
 │   └── GravityBar/
 │       ├── GravityBarApp.swift
 │       ├── StatusBarController.swift
+│       ├── SelfTests.swift
 │       ├── Models/
 │       │   ├── GravityBarTokens.swift
 │       │   └── UsageMetric.swift
 │       ├── Services/
 │       │   ├── UsageManager.swift
 │       │   └── Providers/
+│       │       ├── AntigravityProvider.swift
+│       │       ├── ClaudeProvider.swift
+│       │       ├── CodexProvider.swift
+│       │       ├── MockProvider.swift
+│       │       ├── OllamaProvider.swift
+│       │       └── ProviderProtocol.swift
 │       └── Views/
 │           ├── PopoverView.swift
 │           ├── UsageMetricRowView.swift
@@ -96,11 +103,11 @@ make install
 > **Note**: When GravityBar launches, it docks in your macOS menu bar with a gauge icon and quota percentage. Click the menu bar item or hover over it to inspect the popover.
 
 ### 2. Configure Credentials & Local Paths
-GravityBar comes with **Mock Mode** enabled by default so you can inspect the UI immediately out of the box.
+GravityBar comes with **Mock Mode** disabled by default to track live local accounts out of the box.
 
-To connect live accounts:
+To configure accounts or preview with mock data:
 1. Open the Popover and click the **Preferences** gear (`⚙`).
-2. Toggle off **Mock Provider Mode**.
+2. Toggle on **Mock Provider Mode** if you want to preview dummy metrics without configured providers.
 3. Enable or disable providers (customize for work Mac with Codex or personal Mac with Claude/Gemini).
 4. Specify paths to local state/session files:
    - **Claude**: `~/Library/Application Support/Claude/plan-usage-history.json` (Claude Desktop plan usage). Claude Code CLI token usage is read automatically from `~/.claude/projects/**/*.jsonl`.
